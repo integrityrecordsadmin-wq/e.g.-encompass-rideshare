@@ -156,7 +156,7 @@ function SafetyToolkitScreen({ driver, onBack, onUpdateDriver }) {
 }
 
 // ---------- Home / Online toggle ----------
-function DriverHomeScreen({ driver, online, setOnline, onLogout, onIncomingRide, onSafety, onEarnings }) {
+function DriverHomeScreen({ driver, online, setOnline, onProfile, onIncomingRide, onSafety, onEarnings }) {
   useEffect(() => {
     if (!online) return;
     const unsub = subscribeToNextPendingRide((ride) => onIncomingRide(ride));
@@ -167,7 +167,7 @@ function DriverHomeScreen({ driver, online, setOnline, onLogout, onIncomingRide,
     <div className="relative w-full h-full">
       <div className="absolute inset-0"><CityMap driverPos={online ? DRIVER_HOME : null} showRoute={false} /></div>
       <div className="absolute top-0 left-0 right-0 p-4 flex items-center justify-between">
-        <button onClick={onLogout} aria-label="Account" className="w-10 h-10 rounded-full flex items-center justify-center"
+        <button onClick={onProfile} aria-label="Account" className="w-10 h-10 rounded-full flex items-center justify-center"
           style={{ background: "rgba(17,19,24,0.85)", border: "1px solid #2B2F3A" }}>
           <User size={18} color="#F5F5F0" />
         </button>
@@ -271,9 +271,7 @@ function IncomingRequestScreen({ ride, onAccept, onDecline }) {
       </div>
     </div>
   );
-}
-
-// ---------- Trip in progress ----------
+                            }// ---------- Trip in progress ----------
 function TripScreen({ ride, driver, onComplete }) {
   const [phase, setPhase] = useState("toPickup");
   const [t, setT] = useState(0);
@@ -551,6 +549,54 @@ function EarningsHubScreen({ driver, onBack, onUpdateDriver }) {
   );
 }
 
+// ---------- Profile ----------
+function ProfileScreen({ driver, onBack, onLogout }) {
+  return (
+    <div className="w-full h-full flex flex-col" style={{ background: "#111318" }}>
+      <div className="flex items-center gap-3 p-4 pt-6">
+        <button onClick={onBack} aria-label="Back" className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: "#1D2028" }}>
+          <ChevronLeft size={18} color="#F5F5F0" />
+        </button>
+        <h2 className="text-base font-semibold" style={{ color: "#F5F5F0" }}>Profile</h2>
+      </div>
+
+      <div className="px-4 mt-4 flex flex-col items-center">
+        <div className="w-20 h-20 rounded-full flex items-center justify-center mb-4" style={{ background: ACCENT }}>
+          <User size={32} color="#111318" />
+        </div>
+        <p className="text-xl font-semibold" style={{ color: "#F5F5F0" }}>{driver.name}</p>
+        <div className="flex items-center gap-1 mt-1">
+          <Star size={13} fill={AMBER} color={AMBER} />
+          <span className="text-sm" style={{ color: "#9CA3AF" }}>{(driver.rating || 5).toFixed(2)}</span>
+        </div>
+      </div>
+
+      <div className="px-4 mt-6 space-y-2">
+        <div className="rounded-xl p-3 flex items-center justify-between" style={{ background: "#1D2028", border: "1px solid #2B2F3A" }}>
+          <span className="text-xs" style={{ color: "#9CA3AF" }}>Email</span>
+          <span className="text-sm" style={{ color: "#F5F5F0" }}>{driver.email}</span>
+        </div>
+        <div className="rounded-xl p-3 flex items-center justify-between" style={{ background: "#1D2028", border: "1px solid #2B2F3A" }}>
+          <span className="text-xs" style={{ color: "#9CA3AF" }}>Vehicle</span>
+          <span className="text-sm" style={{ color: "#F5F5F0" }}>{driver.carModel}</span>
+        </div>
+        <div className="rounded-xl p-3 flex items-center justify-between" style={{ background: "#1D2028", border: "1px solid #2B2F3A" }}>
+          <span className="text-xs" style={{ color: "#9CA3AF" }}>Plate</span>
+          <span className="text-sm" style={{ color: "#F5F5F0" }}>{driver.plate}</span>
+        </div>
+      </div>
+
+      <div className="px-4 mt-auto pb-8 pt-6">
+        <button onClick={onLogout}
+          className="w-full py-3.5 rounded-xl font-medium text-base"
+          style={{ background: "#1D2028", color: "#FF6B6B", border: "1px solid #2B2F3A" }}>
+          Log out
+        </button>
+      </div>
+    </div>
+  );
+}
+
 // ---------- Root ----------
 export default function DriverApp() {
   const [driver, setDriver] = useState(null);
@@ -564,4 +610,50 @@ export default function DriverApp() {
   const handleAccept = async () => {
     await updateRide(activeRide.id, {
       status: "accepted", driverName: driver.name, driverUid: driver.uid,
-      carModel: driver.carModel
+      carModel: driver.carModel, plate: driver.plate,
+      driverRecording: !!driver.audioRecordingEnabled,
+    });
+    setScreen("trip");
+  };
+
+  const handleDecline = () => { setActiveRide(null); setScreen("home"); };
+
+  const handleComplete = async () => {
+    await updateRide(activeRide.id, { status: "completed" });
+    const newEarnings = (driver.earningsToday || 0) + activeRide.fare;
+    await updateDriverProfile(driver.uid, { earningsToday: newEarnings });
+    setDriver({ ...driver, earningsToday: newEarnings });
+    setLastFare(activeRide.fare);
+    setActiveRide(null);
+    setScreen("earnings");
+  };
+
+  if (!driver) {
+    return (
+      <div className="w-full h-screen max-w-sm mx-auto overflow-hidden sm:rounded-[2rem] sm:h-[700px] sm:my-8 relative"
+        style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.4)" }}>
+        <DriverAuthScreen onAuthed={(d) => setDriver(d)} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full h-screen max-w-sm mx-auto overflow-hidden sm:rounded-[2rem] sm:h-[700px] sm:my-8 relative"
+      style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.4)" }}>
+      {screen === "home" && (
+        <DriverHomeScreen driver={driver} online={online} setOnline={setOnline}
+          onProfile={() => setScreen("profile")}
+          onIncomingRide={handleIncomingRide} onSafety={() => setScreen("safety")} onEarnings={() => setScreen("earningsHub")} />
+      )}
+      {screen === "profile" && (
+        <ProfileScreen driver={driver} onBack={() => setScreen("home")}
+          onLogout={async () => { await signOut(); setDriver(null); }} />
+      )}
+      {screen === "safety" && <SafetyToolkitScreen driver={driver} onBack={() => setScreen("home")} onUpdateDriver={setDriver} />}
+      {screen === "earningsHub" && <EarningsHubScreen driver={driver} onBack={() => setScreen("home")} onUpdateDriver={setDriver} />}
+      {screen === "request" && activeRide && <IncomingRequestScreen ride={activeRide} onAccept={handleAccept} onDecline={handleDecline} />}
+      {screen === "trip" && activeRide && <TripScreen ride={activeRide} driver={driver} onComplete={handleComplete} />}
+      {screen === "earnings" && <EarningsScreen fare={lastFare} onDone={() => setScreen("home")} />}
+    </div>
+  );
+          }
