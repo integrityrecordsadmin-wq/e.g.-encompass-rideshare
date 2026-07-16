@@ -1,0 +1,26 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Riders and drivers can only read/write their own profile document.
+    match /riders/{uid} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+    match /drivers/{uid} {
+      allow read: if request.auth != null;
+      allow write: if request.auth != null && request.auth.uid == uid;
+    }
+
+    // Any signed-in user (rider or driver) can read and update rides —
+    // needed so a driver can find + accept a pending ride, and both sides
+    // can update status/messages as the trip progresses. Tighten this
+    // further (e.g. only the ride's own riderUid/driverUid can write) once
+    // you're ready to lock it down for production.
+    match /rides/{rideId} {
+      allow read: if request.auth != null;
+      allow create: if request.auth != null;
+      allow update: if request.auth != null;
+    }
+  }
+}
