@@ -10,7 +10,7 @@ import { fareFor, seededTrip } from "../../lib/fare";
 import { VEHICLE_TYPES } from "../../lib/vehicleTypes";
 import {
   signUpRider, loginRider, signOut, updateRiderProfile,
-  createRide, subscribeToRide,
+  createRide, subscribeToRide, resetPassword,
 } from "../../lib/db";
 
 const HOME = { x: 20, y: 78 };
@@ -35,8 +35,10 @@ function AuthScreen({ onAuthed }) {
   const [name, setName] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
 
   const steps = mode === "signup" ? ["email", "password", "name"] : ["email", "password"];
   const current = steps[step];
@@ -46,6 +48,7 @@ function AuthScreen({ onAuthed }) {
     if (current === "email" && !email.trim()) { setError("Enter your email to continue."); return; }
     if (current === "password" && !password) { setError("Enter a password to continue."); return; }
     if (current === "name" && !name.trim()) { setError("Enter your name to continue."); return; }
+    if (current === "name" && mode === "signup" && !agreed) { setError("You must agree to the terms to continue."); return; }
     setStep((s) => s + 1);
   };
 
@@ -67,6 +70,17 @@ function AuthScreen({ onAuthed }) {
       setError(err.message?.replace("Firebase: ", "") || "Something went wrong.");
     }
     setBusy(false);
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email.trim()) { setError("Enter your email above first."); return; }
+    try {
+      await resetPassword(email.trim().toLowerCase());
+      setResetSent(true);
+      setError("");
+    } catch (err) {
+      setError(err.message?.replace("Firebase: ", "") || "Couldn't send reset email.");
+    }
   };
 
   const isLastStep = step === steps.length - 1;
@@ -100,16 +114,37 @@ function AuthScreen({ onAuthed }) {
             style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
         )}
         {current === "password" && (
-          <input autoFocus value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" type="password"
-            autoComplete={mode === "signup" ? "new-password" : "current-password"}
-            className="w-full px-4 py-3.5 rounded-xl text-base outline-none"
-            style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
+          <>
+            <input autoFocus value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" type="password"
+              autoComplete={mode === "signup" ? "new-password" : "current-password"}
+              className="w-full px-4 py-3.5 rounded-xl text-base outline-none"
+              style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
+            {mode === "login" && (
+              <button type="button" onClick={handleForgotPassword} className="text-xs text-right w-full" style={{ color: "#7A7F8A" }}>
+                Forgot password?
+              </button>
+            )}
+            {resetSent && (
+              <p className="text-xs" style={{ color: ACCENT }}>Check your email for a reset link.</p>
+            )}
+          </>
         )}
         {current === "name" && (
-          <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name"
-            autoComplete="name"
-            className="w-full px-4 py-3.5 rounded-xl text-base outline-none"
-            style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
+          <>
+            <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name"
+              autoComplete="name"
+              className="w-full px-4 py-3.5 rounded-xl text-base outline-none"
+              style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
+            {mode === "signup" && (
+              <label className="flex items-start gap-2.5 pt-1">
+                <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)}
+                  className="mt-0.5 w-4 h-4 flex-shrink-0" />
+                <span className="text-xs leading-relaxed" style={{ color: "#7A7F8A" }}>
+                  I agree to the <a href="/terms" className="underline" style={{ color: "#F5F5F0" }}>Terms & Conditions</a> and <a href="/policies" className="underline" style={{ color: "#F5F5F0" }}>Company Policies</a>.
+                </span>
+              </label>
+            )}
+          </>
         )}
 
         {error && <p className="text-sm" style={{ color: "#FF6B6B" }}>{error}</p>}
@@ -135,7 +170,7 @@ function AuthScreen({ onAuthed }) {
         ))}
       </div>
 
-      <button onClick={() => { setMode(mode === "login" ? "signup" : "login"); setStep(0); setError(""); }}
+      <button onClick={() => { setMode(mode === "login" ? "signup" : "login"); setStep(0); setError(""); setResetSent(false); }}
         className="mt-6 text-sm text-center" style={{ color: "#7A7F8A" }}>
         {mode === "login" ? (<>New here? <span style={{ color: "#F5F5F0" }}>Create an account</span></>)
           : (<>Already have an account? <span style={{ color: "#F5F5F0" }}>Log in</span></>)}
