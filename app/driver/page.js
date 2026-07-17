@@ -279,8 +279,37 @@ function IncomingRequestScreen({ ride, onAccept, onDecline }) {
     return () => clearTimeout(t);
   }, [seconds]);
 
+  useEffect(() => {
+    let audioCtx;
+    let interval;
+    try {
+      audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+      const beep = () => {
+        const osc = audioCtx.createOscillator();
+        const gain = audioCtx.createGain();
+        osc.connect(gain);
+        gain.connect(audioCtx.destination);
+        osc.type = "sine";
+        osc.frequency.value = 880;
+        gain.gain.setValueAtTime(0.3, audioCtx.currentTime);
+        gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.3);
+        osc.start();
+        osc.stop(audioCtx.currentTime + 0.3);
+      };
+      beep();
+      interval = setInterval(beep, 1200);
+      if (navigator.vibrate) navigator.vibrate([250, 150, 250]);
+    } catch (e) {}
+    return () => {
+      clearInterval(interval);
+      if (audioCtx) audioCtx.close();
+    };
+  }, []);
+
   return (
     <div className="relative w-full h-full">
+      <div className="absolute inset-0 z-20 pointer-events-none rounded-[2rem] animate-pulse"
+        style={{ boxShadow: `inset 0 0 0 4px ${ACCENT}` }} />
       <CityMap driverPos={PICKUP} markerColor={ACCENT} showRoute={false} pins={[{ ...DROPOFF, color: AMBER }]} />
       <div className="absolute inset-0 flex flex-col justify-end">
         <div className="rounded-t-3xl p-5 pb-8" style={{ background: "#F5F5F0" }}>
