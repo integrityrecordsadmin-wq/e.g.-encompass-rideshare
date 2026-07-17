@@ -1,6 +1,6 @@
 "use client";
 import { useState, useEffect } from "react";
-import { Car, User, DollarSign, Search, CheckCircle2, CircleDot, Star } from "lucide-react";
+import { Car, User, DollarSign, Search, CheckCircle2, CircleDot, Star, AlertTriangle } from "lucide-react";
 import { ACCENT, AMBER, BG, CARD, BORDER, MUTED, TEXT } from "../../lib/tokens";
 import { subscribeToAllRides, subscribeToDrivers, subscribeToRiders } from "../../lib/db";
 
@@ -19,6 +19,12 @@ function timeAgo(ts) {
   if (mins < 1) return "just now";
   if (mins < 60) return `${mins}m ago`;
   return `${Math.floor(mins / 60)}h ago`;
+}
+
+// Days remaining until a timestamp (can be negative if already passed).
+function daysUntil(ts) {
+  if (!ts) return null;
+  return Math.ceil((ts - Date.now()) / (1000 * 60 * 60 * 24));
 }
 
 function StatCard({ icon: Icon, label, value, accent }) {
@@ -42,6 +48,41 @@ function StatusPill({ status }) {
       <span className="w-1.5 h-1.5 rounded-full" style={{ background: meta.color }} />
       {meta.label}
     </span>
+  );
+}
+
+// Banner listing drivers whose insurance expires within 5 days (or already
+// expired). Shows nothing if no one is in that window.
+function InsuranceExpiryBanner({ drivers }) {
+  const flagged = drivers
+    .map((d) => ({ ...d, daysLeft: daysUntil(d.insuranceExpiresAt) }))
+    .filter((d) => d.daysLeft !== null && d.daysLeft <= 5)
+    .sort((a, b) => a.daysLeft - b.daysLeft);
+
+  if (flagged.length === 0) return null;
+
+  return (
+    <div className="rounded-2xl p-4 mb-6 flex items-start gap-3" style={{ background: "#3D1F1F", border: "1px solid #6B2E2E" }}>
+      <AlertTriangle size={18} color="#FF8A8A" className="flex-shrink-0 mt-0.5" />
+      <div className="flex-1">
+        <p className="text-sm font-semibold" style={{ color: "#FFD5D5" }}>
+          {flagged.length} driver{flagged.length > 1 ? "s" : ""} need an insurance reminder
+        </p>
+        <div className="mt-2 space-y-1">
+          {flagged.map((d) => (
+            <p key={d.uid} className="text-xs" style={{ color: "#F0B8B8" }}>
+              <span className="font-medium">{d.name}</span>
+              {" — "}
+              {d.daysLeft < 0
+                ? `expired ${Math.abs(d.daysLeft)} day${Math.abs(d.daysLeft) !== 1 ? "s" : ""} ago`
+                : d.daysLeft === 0
+                ? "expires today"
+                : `expires in ${d.daysLeft} day${d.daysLeft !== 1 ? "s" : ""}`}
+            </p>
+          ))}
+        </div>
+      </div>
+    </div>
   );
 }
 
@@ -79,6 +120,8 @@ export default function AdminDashboard() {
             <p className="text-sm mt-0.5" style={{ color: MUTED }}>Live — updates instantly, no refresh needed</p>
           </div>
         </div>
+
+        <InsuranceExpiryBanner drivers={drivers} />
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
           <StatCard icon={Car} label="Total rides" value={rides.length} />
