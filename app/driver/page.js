@@ -8,9 +8,10 @@ import CityMap from "../../components/CityMap";
 import ChatPanel from "../../components/ChatPanel";
 import { ACCENT, AMBER } from "../../lib/tokens";
 import { wazeNavigateUrl } from "../../lib/waze";
+import { VEHICLE_TYPES } from "../../lib/vehicleTypes";
 import {
   signUpDriver, loginDriver, signOut, updateDriverProfile,
-  updateRide, subscribeToRide, subscribeToNextPendingRide, subscribeToDriverRides,
+  updateRide, subscribeToRide, subscribeToNextPendingRide, subscribeToDriverRides, resetPassword,
 } from "../../lib/db";
 
 const PICKUP = { x: 78, y: 24 };
@@ -36,8 +37,11 @@ function DriverAuthScreen({ onAuthed }) {
   const [password, setPassword] = useState("");
   const [carModel, setCarModel] = useState("");
   const [plate, setPlate] = useState("");
+  const [vehicleType, setVehicleType] = useState("standard");
+  const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -46,16 +50,31 @@ function DriverAuthScreen({ onAuthed }) {
       setError("Fill in every field to continue.");
       return;
     }
+    if (mode === "signup" && !agreed) {
+      setError("You must agree to the terms to continue.");
+      return;
+    }
     setBusy(true);
     try {
       const driver = mode === "signup"
-        ? await signUpDriver({ name, email: email.trim().toLowerCase(), password, carModel, plate })
+        ? await signUpDriver({ name, email: email.trim().toLowerCase(), password, carModel, plate, vehicleType })
         : await loginDriver({ email: email.trim().toLowerCase(), password });
       onAuthed(driver);
     } catch (err) {
       setError(err.message?.replace("Firebase: ", "") || "Something went wrong.");
     }
     setBusy(false);
+  };
+
+  const handleForgotPassword = async () => {
+    if (!email.trim()) { setError("Enter your email above first."); return; }
+    try {
+      await resetPassword(email.trim().toLowerCase());
+      setResetSent(true);
+      setError("");
+    } catch (err) {
+      setError(err.message?.replace("Firebase: ", "") || "Couldn't send reset email.");
+    }
   };
 
   return (
@@ -85,6 +104,23 @@ function DriverAuthScreen({ onAuthed }) {
                 className="w-1/3 px-4 py-3.5 rounded-xl text-base outline-none"
                 style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
             </div>
+            <div>
+              <p className="text-xs mb-2" style={{ color: "#7A7F8A" }}>What do you drive?</p>
+              <div className="grid grid-cols-2 gap-2">
+                {VEHICLE_TYPES.map((v) => {
+                  const Icon = v.icon;
+                  const isSelected = vehicleType === v.id;
+                  return (
+                    <button key={v.id} type="button" onClick={() => setVehicleType(v.id)}
+                      className="flex items-center gap-2 p-3 rounded-xl text-left"
+                      style={{ background: isSelected ? ACCENT : "#1D2028", border: `1px solid ${isSelected ? ACCENT : "#2B2F3A"}` }}>
+                      <Icon size={16} color={isSelected ? "#111318" : "#F5F5F0"} />
+                      <span className="text-xs font-medium" style={{ color: isSelected ? "#111318" : "#F5F5F0" }}>{v.name}</span>
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
           </>
         )}
         <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" type="email"
@@ -93,6 +129,23 @@ function DriverAuthScreen({ onAuthed }) {
         <input value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" type="password"
           className="w-full px-4 py-3.5 rounded-xl text-base outline-none"
           style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
+        {mode === "login" && (
+          <button type="button" onClick={handleForgotPassword} className="text-xs text-right w-full" style={{ color: "#7A7F8A" }}>
+            Forgot password?
+          </button>
+        )}
+        {resetSent && (
+          <p className="text-xs" style={{ color: ACCENT }}>Check your email for a reset link.</p>
+        )}
+        {mode === "signup" && (
+          <label className="flex items-start gap-2.5 pt-1">
+            <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)}
+              className="mt-0.5 w-4 h-4 flex-shrink-0" />
+            <span className="text-xs leading-relaxed" style={{ color: "#7A7F8A" }}>
+              I agree to the <a href="/terms" className="underline" style={{ color: "#F5F5F0" }}>Terms & Conditions</a> and <a href="/policies" className="underline" style={{ color: "#F5F5F0" }}>Company Policies</a>.
+            </span>
+          </label>
+        )}
         {error && <p className="text-sm" style={{ color: "#FF6B6B" }}>{error}</p>}
         <button type="submit" disabled={busy}
           className="w-full py-3.5 rounded-xl font-medium text-base mt-2 transition active:scale-[0.98]"
@@ -100,7 +153,7 @@ function DriverAuthScreen({ onAuthed }) {
           {busy ? "One sec…" : mode === "login" ? "Log in" : "Create driver account"}
         </button>
       </form>
-      <button onClick={() => { setMode(mode === "login" ? "signup" : "login"); setError(""); }}
+      <button onClick={() => { setMode(mode === "login" ? "signup" : "login"); setError(""); setResetSent(false); }}
         className="mt-6 text-sm text-center" style={{ color: "#7A7F8A" }}>
         {mode === "login" ? (<>New driver? <span style={{ color: "#F5F5F0" }}>Create an account</span></>)
           : (<>Already driving with us? <span style={{ color: "#F5F5F0" }}>Log in</span></>)}
@@ -159,9 +212,11 @@ function SafetyToolkitScreen({ driver, onBack, onUpdateDriver }) {
 function DriverHomeScreen({ driver, online, setOnline, onProfile, onIncomingRide, onSafety, onEarnings }) {
   useEffect(() => {
     if (!online) return;
-    const unsub = subscribeToNextPendingRide((ride) => onIncomingRide(ride));
+    const unsub = subscribeToNextPendingRide(driver.vehicleType, (ride) => onIncomingRide(ride));
     return unsub;
   }, [online]);
+
+  const vehicleInfo = VEHICLE_TYPES.find((v) => v.id === (driver.vehicleType || "standard"));
 
   return (
     <div className="relative w-full h-full">
@@ -193,6 +248,7 @@ function DriverHomeScreen({ driver, online, setOnline, onProfile, onIncomingRide
           <div>
             <p className="font-semibold text-lg" style={{ color: "#111318" }}>{driver.name.split(" ")[0]}</p>
             <p className="text-xs" style={{ color: "#7A7F8A" }}>{driver.carModel} · {driver.plate}</p>
+            <p className="text-xs mt-0.5" style={{ color: ACCENT }}>{vehicleInfo?.name} driver</p>
           </div>
           <div className="flex items-center gap-1">
             <Star size={13} fill={AMBER} color={AMBER} />
@@ -211,9 +267,7 @@ function DriverHomeScreen({ driver, online, setOnline, onProfile, onIncomingRide
       </div>
     </div>
   );
-}
-
-// ---------- Incoming request ----------
+}// ---------- Incoming request ----------
 function IncomingRequestScreen({ ride, onAccept, onDecline }) {
   const [seconds, setSeconds] = useState(15);
 
@@ -271,7 +325,9 @@ function IncomingRequestScreen({ ride, onAccept, onDecline }) {
       </div>
     </div>
   );
-                            }// ---------- Trip in progress ----------
+}
+
+// ---------- Trip in progress ----------
 function TripScreen({ ride, driver, onComplete }) {
   const [phase, setPhase] = useState("toPickup");
   const [t, setT] = useState(0);
@@ -551,6 +607,12 @@ function EarningsHubScreen({ driver, onBack, onUpdateDriver }) {
 
 // ---------- Profile ----------
 function ProfileScreen({ driver, onBack, onLogout }) {
+  const statusInfo = {
+    pending: { label: "Background check pending", color: "#9CA3AF" },
+    cleared: { label: "Background check cleared", color: "#4ADE80" },
+    failed: { label: "Background check not passed", color: "#FF6B6B" },
+  }[driver.backgroundCheckStatus || "pending"];
+
   return (
     <div className="w-full h-full flex flex-col" style={{ background: "#111318" }}>
       <div className="flex items-center gap-3 p-4 pt-6">
@@ -583,6 +645,10 @@ function ProfileScreen({ driver, onBack, onLogout }) {
         <div className="rounded-xl p-3 flex items-center justify-between" style={{ background: "#1D2028", border: "1px solid #2B2F3A" }}>
           <span className="text-xs" style={{ color: "#9CA3AF" }}>Plate</span>
           <span className="text-sm" style={{ color: "#F5F5F0" }}>{driver.plate}</span>
+        </div>
+        <div className="rounded-xl p-3 flex items-center justify-between" style={{ background: "#1D2028", border: "1px solid #2B2F3A" }}>
+          <span className="text-xs" style={{ color: "#9CA3AF" }}>Verification</span>
+          <span className="text-sm font-medium" style={{ color: statusInfo.color }}>{statusInfo.label}</span>
         </div>
       </div>
 
@@ -656,4 +722,4 @@ export default function DriverApp() {
       {screen === "earnings" && <EarningsScreen fare={lastFare} onDone={() => setScreen("home")} />}
     </div>
   );
-          }
+}
