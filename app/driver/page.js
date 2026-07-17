@@ -711,7 +711,11 @@ export default function DriverApp() {
     setScreen("trip");
   };
 
-  const handleDecline = () => { setActiveRide(null); setScreen("home"); };
+  const handleDecline = async () => {
+  if (activeRide) await updateRide(activeRide.id, { status: "cancelled" });
+  setActiveRide(null);
+  setScreen("home");
+};
 
   const handleComplete = async () => {
     await updateRide(activeRide.id, { status: "completed" });
