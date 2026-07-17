@@ -2,25 +2,31 @@ rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
 
-    // Riders and drivers can only read/write their own profile document.
+    // Riders and drivers can read any profile (for showing driver/rider name on a ride),
+    // but can only write their own — except rating fields, which the OTHER party
+    // needs to update after a completed ride.
     match /riders/{uid} {
       allow read: if request.auth != null;
       allow write: if request.auth != null && request.auth.uid == uid;
+      allow update: if request.auth != null
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rating', 'ratingCount']);
     }
     match /drivers/{uid} {
       allow read: if request.auth != null;
       allow write: if request.auth != null && request.auth.uid == uid;
+      allow update: if request.auth != null
+        && request.resource.data.diff(resource.data).affectedKeys().hasOnly(['rating', 'ratingCount']);
     }
 
-    // Any signed-in user (rider or driver) can read and update rides —
-    // needed so a driver can find + accept a pending ride, and both sides
-    // can update status/messages as the trip progresses. Tighten this
-    // further (e.g. only the ride's own riderUid/driverUid can write) once
-    // you're ready to lock it down for production.
+    // Rides: any signed-in user can read (needed to find pending rides) and create
+    // a ride as themselves. Once a ride exists, only the rider or driver ON that
+    // specific ride can update it — not just any signed-in user.
     match /rides/{rideId} {
       allow read: if request.auth != null;
-      allow create: if request.auth != null;
-      allow update: if request.auth != null;
+      allow create: if request.auth != null && request.resource.data.riderUid == request.auth.uid;
+      allow update: if request.auth != null
+        && (request.auth.uid == resource.data.riderUid || request.auth.uid == resource.data.driverUid
+            || resource.data.driverUid == null);
     }
   }
 }
