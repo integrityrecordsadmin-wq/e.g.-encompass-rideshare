@@ -386,13 +386,30 @@ function DestinationScreen({ onBack, onConfirm }) {
 }
 
 // ---------- Finding driver ----------
-function FindingDriverScreen({ rideId, destination, onAccepted }) {
+function FindingDriverScreen({ rideId, destination, onAccepted, onCancelled }) {
+  const [cancelled, setCancelled] = useState(false);
+
   useEffect(() => {
     const unsub = subscribeToRide(rideId, (ride) => {
       if (ride.status === "accepted") onAccepted(ride);
+      else if (ride.status === "cancelled") setCancelled(true);
     });
     return unsub;
   }, [rideId]);
+
+  if (cancelled) {
+    return (
+      <div className="w-full h-full relative flex flex-col items-center justify-center px-8" style={{ background: "#111318" }}>
+        <p className="text-base font-medium text-center" style={{ color: "#F5F5F0" }}>No driver was available for this ride.</p>
+        <p className="text-sm mt-1 text-center" style={{ color: "#7A7F8A" }}>Please try requesting again.</p>
+        <button onClick={onCancelled}
+          className="mt-6 px-6 py-3 rounded-xl font-medium text-base"
+          style={{ background: ACCENT, color: "#111318" }}>
+          Back home
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div className="w-full h-full relative">
@@ -410,10 +427,7 @@ function FindingDriverScreen({ rideId, destination, onAccepted }) {
     </div>
   );
 }
-
-// ---------- Family Ride live-watch modal (pink frame) ----------
-function FamilyWatchModal({ ride, onClose }) {
-  return (
+    
     <div className="fixed inset-0 z-50 overflow-y-auto" style={{ background: FAMILY.bg }}>
       <div className="w-full max-w-sm mx-auto px-5 py-8">
         <button onClick={onClose} className="mb-4 text-sm font-medium" style={{ color: FAMILY.plumSoft }}>← Back to tracking</button>
