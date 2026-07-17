@@ -333,3 +333,421 @@ function IncomingRequestScreen({ ride, onAccept, onDecline }) {
     </div>
   );
 }
+// ---------- Trip in progress ----------
+function TripScreen({ ride, driver, onComplete }) {
+  const [phase, setPhase] = useState("toPickup");
+  const [t, setT] = useState(0);
+  const [chatOpen, setChatOpen] = useState(false);
+  const [seenMsgCount, setSeenMsgCount] = useState((ride.messages || []).length);
+  const [liveMsgCount, setLiveMsgCount] = useState((ride.messages || []).length);
+  const rafRef = useRef();
+  const startRef = useRef(null);
+
+  useEffect(() => {
+    const unsub = subscribeToRide(ride.id, (r) => setLiveMsgCount((r.messages || []).length));
+    return unsub;
+  }, [ride.id]);
+
+  const toPickupPath = [DRIVER_HOME, { x: DRIVER_HOME.x, y: PICKUP.y }, PICKUP];
+  const toDropoffPath = [PICKUP, { x: PICKUP.x, y: DROPOFF.y }, DROPOFF];
+  const activePath = phase === "toPickup" ? toPickupPath : toDropoffPath;
+  const duration = phase === "toPickup" ? 4000 : 5500;
+
+  useEffect(() => {
+    if (phase === "arrivedPickup" || phase === "arrivedDropoff") return;
+    startRef.current = null;
+    const step = (ts) => {
+      if (!startRef.current) startRef.current = ts;
+      const progress = Math.min((ts - startRef.current) / duration, 1);
+      setT(progress);
+      if (progress < 1) rafRef.current = requestAnimationFrame(step);
+      else if (phase === "toPickup") { setPhase("arrivedPickup"); updateRide(ride.id, { status: "arrived_pickup" }); }
+      else if (phase === "toDropoff") setPhase("arrivedDropoff");
+    };
+    rafRef.current = requestAnimationFrame(step);
+    return () => cancelAnimationFrame(rafRef.current);
+  }, [phase]);
+
+  const markerPos = phase === "arrivedPickup" ? PICKUP : phase === "arrivedDropoff" ? DROPOFF : pointAt(activePath, t);
+  const statusText = {
+    toPickup: "Heading to pickup",
+    arrivedPickup: "You've arrived at pickup",
+    toDropoff: `En route to ${ride.destination}`,
+    arrivedDropoff: "You've arrived at drop-off",
+  }[phase];
+
+  const startTrip = async () => {
+    await updateRide(ride.id, { status: "in_progress" });
+    setPhase("toDropoff");
+    setT(0);
+  };
+
+  const inTrip = phase === "toDropoff" || phase === "arrivedDropoff";
+
+  return (
+    <div className="relative w-full h-full">
+      <CityMap
+        driverPos={markerPos}
+        markerColor={ACCENT}
+        showRoute
+        routePath={phase === "toPickup" || phase === "arrivedPickup" ? toPickupPath : toDropoffPath}
+        pins={[{ ...(phase === "toPickup" || phase === "arrivedPickup" ? DROPOFF : PICKUP), color: "#7A7F8A" }]}
+      />
+
+      {ride.isFamilyRide && inTrip && ride.familyVideoUrl && (
+        <div className="absolute top-4 right-4 w-24 h-24 rounded-2xl overflow-hidden z-10"
+          style={{ border: "2px solid #E8547C", boxShadow: "0 6px 16px -4px rgba(0,0,0,0.4)" }}>
+          <iframe
+            src={`${ride.familyVideoUrl}?userName=Driver`}
+            allow="camera; microphone; autoplay; display-capture"
+            className="w-full h-full border-0"
+          />
+          <div className="absolute bottom-1 left-1 px-1.5 py-0.5 rounded text-[9px] font-semibold" style={{ background: "rgba(0,0,0,0.6)", color: "#fff" }}>
+            LIVE
+          </div>
+        </div>
+      )}
+
+      <div className="absolute top-4 left-4 right-4">
+        {ride.riderRecording && (
+          <div className="px-4 py-2.5 rounded-xl flex items-center gap-2 mb-2" style={{ background: "rgba(108,92,231,0.15)", border: `1px solid ${ACCENT}` }}>
+            <Shield size={14} color={ACCENT} />
+            <span className="text-xs" style={{ color: "#F5F5F0" }}>Rider may be audio recording this trip</span>
+          </div>
+        )}
+        {ride.isFamilyRide && (
+          <div className="px-4 py-2 rounded-xl flex items-center gap-2 mb-2" style={{ background: "rgba(232,84,124,0.2)", border: "1px solid #E8547C" }}>
+            <span className="text-xs font-medium" style={{ color: "#F5F5F0" }}>❤ Family Ride — parent is watching live</span>
+          </div>
+        )}
+        <div className="px-4 py-2.5 rounded-full flex items-center gap-2" style={{ background: "rgba(17,19,24,0.85)", border: "1px solid #2B2F3A" }}>
+          <div className="w-2 h-2 rounded-full" style={{ background: phase.startsWith("arrived") ? "#4ADE80" : AMBER }} />
+          <span className="text-sm" style={{ color: "#F5F5F0" }}>{statusText}</span>
+        </div>
+      </div>
+      <div className="absolute bottom-0 left-0 right-0 rounded-t-3xl p-5 pb-8" style={{ background: "#F5F5F0" }}>
+        <div className="w-9 h-1 rounded-full mx-auto mb-5" style={{ background: "#D8D6CE" }} />
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-11 h-11 rounded-full flex items-center justify-center" style={{ background: "#EDEBE2" }}>
+            <User size={18} color="#111318" />
+          </div>
+          <div>
+            <p className="font-semibold text-sm" style={{ color: "#111318" }}>{ride.riderName}</p>
+            <p className="text-xs" style={{ color: "#7A7F8A" }}>Rider</p>
+          </div>
+          <div className="ml-auto text-right">
+            <p className="font-semibold text-sm" style={{ color: "#111318" }}>${ride.fare.toFixed(2)}</p>
+          </div>
+          <button onClick={() => { setChatOpen(true); setSeenMsgCount(liveMsgCount); }} aria-label="Open chat"
+            className="relative w-11 h-11 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: "#EDEBE2" }}>
+            <MessageCircle size={18} color="#111318" />
+            {liveMsgCount > seenMsgCount && <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full" style={{ background: AMBER }} />}
+          </button>
+        </div>
+        {(phase === "toPickup" || phase === "toDropoff") && (
+          <a href={wazeNavigateUrl(phase === "toPickup" ? `Pickup for ${ride.riderName}` : ride.destination)}
+            target="_blank" rel="noopener noreferrer"
+            className="w-full mb-2.5 py-3.5 rounded-xl font-medium text-base flex items-center justify-center gap-2"
+            style={{ background: "#111318", color: "#F5F5F0" }}>
+            <Navigation size={16} color={AMBER} /> Navigate in Waze
+          </a>
+        )}
+        {phase === "arrivedPickup" && (
+          <button onClick={startTrip} className="w-full py-3.5 rounded-xl font-medium text-base" style={{ background: ACCENT, color: "#111318" }}>
+            Start trip
+          </button>
+        )}
+        {phase === "arrivedDropoff" && (
+          <button onClick={onComplete}
+            className="w-full py-3.5 rounded-xl font-medium text-base flex items-center justify-center gap-2"
+            style={{ background: ACCENT, color: "#111318" }}>
+            <Check size={16} /> Complete ride
+          </button>
+        )}
+        {(phase === "toPickup" || phase === "toDropoff") && (
+          <div className="flex items-center gap-2 text-xs" style={{ color: "#7A7F8A" }}>
+            <Clock size={13} /> <span>In progress…</span>
+          </div>
+        )}
+      </div>
+      {chatOpen && (
+        <ChatPanel rideId={ride.id} mySender="driver" otherName={ride.riderName} quickReplies={QUICK_REPLIES_DRIVER} onClose={() => setChatOpen(false)} />
+      )}
+    </div>
+  );
+}
+
+// ---------- Earnings (post-ride) ----------
+function EarningsScreen({ fare, onDone }) {
+  return (
+    <div className="w-full h-full flex flex-col items-center justify-center px-8" style={{ background: "#111318" }}>
+      <div className="w-16 h-16 rounded-full flex items-center justify-center mb-6" style={{ background: ACCENT }}>
+        <DollarSign size={28} color="#111318" />
+      </div>
+      <h2 className="text-xl font-semibold" style={{ color: "#F5F5F0" }}>Ride complete</h2>
+      <p className="text-sm mt-1 mb-2 text-center" style={{ color: "#7A7F8A" }}>You earned</p>
+      <p className="text-3xl font-semibold mb-8" style={{ color: AMBER }}>${fare.toFixed(2)}</p>
+      <button onClick={onDone} className="w-full py-3.5 rounded-xl font-medium text-base" style={{ background: ACCENT, color: "#111318" }}>Back online</button>
+    </div>
+  );
+}
+
+// ---------- Earnings Hub ----------
+function EarningsHubScreen({ driver, onBack, onUpdateDriver }) {
+  const [rides, setRides] = useState([]);
+  const [filter, setFilter] = useState("All");
+  const [mpg, setMpg] = useState(driver.mpg || 25);
+  const [gasPrice, setGasPrice] = useState(driver.gasPrice || 3.5);
+
+  useEffect(() => {
+    const unsub = subscribeToDriverRides(driver.uid, setRides);
+    return unsub;
+  }, [driver.uid]);
+
+  const saveVehicleInfo = async () => {
+    await updateDriverProfile(driver.uid, { mpg: Number(mpg), gasPrice: Number(gasPrice) });
+    onUpdateDriver({ ...driver, mpg: Number(mpg), gasPrice: Number(gasPrice) });
+  };
+
+  const periodOf = (ts) => {
+    const h = new Date(ts).getHours();
+    if (h < 12) return "AM";
+    if (h < 17) return "MID";
+    return "PM";
+  };
+
+  const startOfWeek = (() => {
+    const d = new Date();
+    d.setDate(d.getDate() - d.getDay());
+    d.setHours(0, 0, 0, 0);
+    return d.getTime();
+  })();
+
+  const compute = (list) => {
+    const miles = list.reduce((s, r) => s + (r.miles || 0), 0);
+    const earnings = list.reduce((s, r) => s + (r.fare || 0), 0);
+    const minutes = list.reduce((s, r) => s + (r.minutes || 0), 0);
+    const gasCost = mpg > 0 ? (miles / mpg) * gasPrice : 0;
+    const net = earnings - gasCost;
+    return {
+      miles: miles.toFixed(1),
+      avgMpg: mpg,
+      gasCost: gasCost.toFixed(2),
+      earnings: earnings.toFixed(2),
+      netPerHour: minutes > 0 ? (net / (minutes / 60)).toFixed(2) : "0.00",
+      netPerMile: miles > 0 ? (net / miles).toFixed(2) : "0.00",
+    };
+  };
+
+  const ytdRides = rides.filter((r) => new Date(r.createdAt).getFullYear() === new Date().getFullYear());
+  const weekRides = rides.filter((r) => r.createdAt >= startOfWeek);
+  const filteredWeekRides = filter === "All" ? weekRides : weekRides.filter((r) => periodOf(r.createdAt) === filter);
+
+  const ytd = compute(ytdRides);
+  const week = compute(weekRides);
+
+  const StatGrid = ({ stats }) => (
+    <div className="grid grid-cols-3 gap-2">
+      {[
+        [stats.miles, "Miles"], [stats.avgMpg, "Avg MPG"], [`$${stats.gasCost}`, "Gas Cost"],
+        [`$${stats.earnings}`, "Earnings"], [`$${stats.netPerHour}`, "Net/Hr"], [`$${stats.netPerMile}`, "Net/Mi"],
+      ].map(([val, label]) => (
+        <div key={label} className="rounded-xl p-3" style={{ background: "#1D2028", border: "1px solid #2B2F3A" }}>
+          <p className="text-lg font-semibold" style={{ color: "#F5F5F0" }}>{val}</p>
+          <p className="text-[10px] uppercase tracking-wide mt-0.5" style={{ color: "#9CA3AF" }}>{label}</p>
+        </div>
+      ))}
+    </div>
+  );
+
+  return (
+    <div className="w-full h-full overflow-y-auto" style={{ background: "#111318" }}>
+      <div className="flex items-center gap-3 p-4 pt-6">
+        <button onClick={onBack} aria-label="Back" className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: "#1D2028" }}>
+          <ChevronLeft size={18} color="#F5F5F0" />
+        </button>
+        <h2 className="text-base font-semibold" style={{ color: "#F5F5F0" }}>Earnings</h2>
+      </div>
+
+      <div className="px-4 mt-2">
+        <p className="text-xs mb-2" style={{ color: "#9CA3AF" }}>{new Date().getFullYear()} — YTD</p>
+        <StatGrid stats={ytd} />
+      </div>
+
+      <div className="px-4 mt-6">
+        <p className="text-xs mb-2" style={{ color: "#9CA3AF" }}>This Week</p>
+        <StatGrid stats={week} />
+      </div>
+
+      <div className="px-4 mt-6 flex items-center justify-between">
+        <p className="text-xs" style={{ color: "#9CA3AF" }}>This Week's Shifts</p>
+        <div className="flex gap-1">
+          {["All", "AM", "MID", "PM"].map((p) => (
+            <button key={p} onClick={() => setFilter(p)}
+              className="px-3 py-1 rounded-full text-xs"
+              style={{ background: filter === p ? ACCENT : "#1D2028", color: filter === p ? "#111318" : "#9CA3AF" }}>
+              {p}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      <div className="px-4 mt-3 space-y-2 pb-4">
+        {filteredWeekRides.length === 0 && (
+          <p className="text-xs text-center py-6" style={{ color: "#9CA3AF" }}>No shifts yet this period.</p>
+        )}
+        {filteredWeekRides.map((r) => {
+          const gas = mpg > 0 ? (r.miles / mpg) * gasPrice : 0;
+          const netHr = r.minutes > 0 ? ((r.fare - gas) / (r.minutes / 60)).toFixed(2) : "0.00";
+          return (
+            <div key={r.id} className="rounded-xl p-3 flex items-center justify-between text-xs"
+              style={{ background: "#1D2028", border: "1px solid #2B2F3A" }}>
+              <span style={{ color: "#F5F5F0" }}>{new Date(r.createdAt).toLocaleDateString(undefined, { month: "short", day: "numeric" })}</span>
+              <span style={{ color: "#9CA3AF" }}>{r.miles?.toFixed(1)} mi</span>
+              <span style={{ color: "#9CA3AF" }}>${gas.toFixed(2)}</span>
+              <span style={{ color: AMBER }}>${r.fare?.toFixed(2)}</span>
+              <span style={{ color: "#F5F5F0" }}>${netHr}/hr</span>
+            </div>
+          );
+        })}
+      </div>
+
+      <div className="px-4 mt-2 pb-8">
+        <p className="text-xs mb-2" style={{ color: "#9CA3AF" }}>Vehicle info (for gas cost calc)</p>
+        <div className="flex gap-2">
+          <input value={mpg} onChange={(e) => setMpg(e.target.value)} type="number" placeholder="MPG"
+            aria-label="Vehicle MPG"
+            className="w-1/2 px-3 py-2.5 rounded-xl text-sm outline-none"
+            style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
+          <input value={gasPrice} onChange={(e) => setGasPrice(e.target.value)} type="number" step="0.01" placeholder="$/gallon"
+            aria-label="Gas price per gallon"
+            className="w-1/2 px-3 py-2.5 rounded-xl text-sm outline-none"
+            style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
+        </div>
+        <button onClick={saveVehicleInfo} className="w-full mt-2 py-2.5 rounded-xl text-sm font-medium"
+          style={{ background: ACCENT, color: "#111318" }}>
+          Save
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------- Profile ----------
+function ProfileScreen({ driver, onBack, onLogout }) {
+  const statusInfo = {
+    pending: { label: "Background check pending", color: "#9CA3AF" },
+    cleared: { label: "Background check cleared", color: "#4ADE80" },
+    failed: { label: "Background check not passed", color: "#FF6B6B" },
+  }[driver.backgroundCheckStatus || "pending"];
+
+  return (
+    <div className="w-full h-full flex flex-col" style={{ background: "#111318" }}>
+      <div className="flex items-center gap-3 p-4 pt-6">
+        <button onClick={onBack} aria-label="Back" className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: "#1D2028" }}>
+          <ChevronLeft size={18} color="#F5F5F0" />
+        </button>
+        <h2 className="text-base font-semibold" style={{ color: "#F5F5F0" }}>Profile</h2>
+      </div>
+
+      <div className="px-4 mt-4 flex flex-col items-center">
+        <div className="w-20 h-20 rounded-full flex items-center justify-center mb-4" style={{ background: ACCENT }}>
+          <User size={32} color="#111318" />
+        </div>
+        <p className="text-xl font-semibold" style={{ color: "#F5F5F0" }}>{driver.name}</p>
+        <div className="flex items-center gap-1 mt-1">
+          <Star size={13} fill={AMBER} color={AMBER} />
+          <span className="text-sm" style={{ color: "#9CA3AF" }}>{(driver.rating || 5).toFixed(2)}</span>
+        </div>
+      </div>
+
+      <div className="px-4 mt-6 space-y-2">
+        <div className="rounded-xl p-3 flex items-center justify-between" style={{ background: "#1D2028", border: "1px solid #2B2F3A" }}>
+          <span className="text-xs" style={{ color: "#9CA3AF" }}>Email</span>
+          <span className="text-sm" style={{ color: "#F5F5F0" }}>{driver.email}</span>
+        </div>
+        <div className="rounded-xl p-3 flex items-center justify-between" style={{ background: "#1D2028", border: "1px solid #2B2F3A" }}>
+          <span className="text-xs" style={{ color: "#9CA3AF" }}>Vehicle</span>
+          <span className="text-sm" style={{ color: "#F5F5F0" }}>{driver.carModel}</span>
+        </div>
+        <div className="rounded-xl p-3 flex items-center justify-between" style={{ background: "#1D2028", border: "1px solid #2B2F3A" }}>
+          <span className="text-xs" style={{ color: "#9CA3AF" }}>Plate</span>
+          <span className="text-sm" style={{ color: "#F5F5F0" }}>{driver.plate}</span>
+        </div>
+        <div className="rounded-xl p-3 flex items-center justify-between" style={{ background: "#1D2028", border: "1px solid #2B2F3A" }}>
+          <span className="text-xs" style={{ color: "#9CA3AF" }}>Verification</span>
+          <span className="text-sm font-medium" style={{ color: statusInfo.color }}>{statusInfo.label}</span>
+        </div>
+      </div>
+
+      <div className="px-4 mt-auto pb-8 pt-6">
+        <button onClick={onLogout}
+          className="w-full py-3.5 rounded-xl font-medium text-base"
+          style={{ background: "#1D2028", color: "#FF6B6B", border: "1px solid #2B2F3A" }}>
+          Log out
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ---------- Root ----------
+export default function DriverApp() {
+  const [driver, setDriver] = useState(null);
+  const [online, setOnline] = useState(false);
+  const [screen, setScreen] = useState("home");
+  const [activeRide, setActiveRide] = useState(null);
+  const [lastFare, setLastFare] = useState(0);
+
+  const handleIncomingRide = (ride) => { setActiveRide(ride); setScreen("request"); };
+
+  const handleAccept = async () => {
+    await updateRide(activeRide.id, {
+      status: "accepted", driverName: driver.name, driverUid: driver.uid,
+      carModel: driver.carModel, plate: driver.plate,
+      driverRecording: !!driver.audioRecordingEnabled,
+    });
+    setScreen("trip");
+  };
+
+  const handleDecline = () => { setActiveRide(null); setScreen("home"); };
+
+  const handleComplete = async () => {
+    await updateRide(activeRide.id, { status: "completed" });
+    const newEarnings = (driver.earningsToday || 0) + activeRide.fare;
+    await updateDriverProfile(driver.uid, { earningsToday: newEarnings });
+    setDriver({ ...driver, earningsToday: newEarnings });
+    setLastFare(activeRide.fare);
+    setActiveRide(null);
+    setScreen("earnings");
+  };
+
+  if (!driver) {
+    return (
+      <div className="w-full h-screen max-w-sm mx-auto overflow-hidden sm:rounded-[2rem] sm:h-[700px] sm:my-8 relative"
+        style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.4)" }}>
+        <DriverAuthScreen onAuthed={(d) => setDriver(d)} />
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full h-screen max-w-sm mx-auto overflow-hidden sm:rounded-[2rem] sm:h-[700px] sm:my-8 relative"
+      style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.4)" }}>
+      {screen === "home" && (
+        <DriverHomeScreen driver={driver} online={online} setOnline={setOnline}
+          onProfile={() => setScreen("profile")}
+          onIncomingRide={handleIncomingRide} onSafety={() => setScreen("safety")} onEarnings={() => setScreen("earningsHub")} />
+      )}
+      {screen === "profile" && (
+        <ProfileScreen driver={driver} onBack={() => setScreen("home")}
+          onLogout={async () => { await signOut(); setDriver(null); }} />
+      )}
+      {screen === "safety" && <SafetyToolkitScreen driver={driver} onBack={() => setScreen("home")} onUpdateDriver={setDriver} />}
+      {screen === "earningsHub" && <EarningsHubScreen driver={driver} onBack={() => setScreen("home")} onUpdateDriver={setDriver} />}
+      {screen === "request" && activeRide && <IncomingRequestScreen ride={activeRide} onAccept={handleAccept} onDecline={handleDecline} />}
+      {screen === "trip" && activeRide && <TripScreen ride={activeRide} driver={driver} onComplete={handleComplete} />}
+      {screen === "earnings" && <EarningsScreen fare={lastFare} onDone={() => setScreen("home")} />}
+    </div>
+  );
+          }
