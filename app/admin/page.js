@@ -5,7 +5,7 @@ import { Car, User, DollarSign, Search, CheckCircle2, CircleDot, Star, AlertTria
 import { ACCENT, AMBER, BG, CARD, BORDER, MUTED, TEXT } from "../../lib/tokens";
 import {
   subscribeToAllRides, subscribeToDrivers, subscribeToRiders,
-  scheduleVerificationCall, reviewDriverDocuments, updateDriverProfile,
+  scheduleVerificationCall, reviewDriverDocuments, updateDriverProfile, loginAdmin,
 } from "../../lib/db";
 
 const STATUS_META = {
@@ -38,7 +38,6 @@ function daysUntil(ts) {
   return Math.ceil((ts - Date.now()) / (1000 * 60 * 60 * 24));
 }
 
-// Convert a stored timestamp (ms) to a value usable in a <input type="date">.
 function tsToDateInput(ts) {
   if (!ts) return "";
   return new Date(ts).toISOString().slice(0, 10);
@@ -101,8 +100,6 @@ function InsuranceExpiryBanner({ drivers }) {
   );
 }
 
-// Slide-over panel for reviewing/managing one driver: verification call
-// scheduling, document approval, insurance date, background check status.
 function DriverDetailPanel({ driver, onClose }) {
   const [callDate, setCallDate] = useState("");
   const [callTime, setCallTime] = useState("");
@@ -111,7 +108,7 @@ function DriverDetailPanel({ driver, onClose }) {
   const [rejectReason, setRejectReason] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const docStatus = DOC_STATUS_META[driver.backgroundCheckStatus === "cleared" ? driver.documentsStatus : driver.documentsStatus] || DOC_STATUS_META.not_submitted;
+  const docStatus = DOC_STATUS_META[driver.documentsStatus] || DOC_STATUS_META.not_submitted;
 
   const handleScheduleCall = async () => {
     if (!callDate || !callTime || !zoomLink.trim()) return;
@@ -238,7 +235,43 @@ function DriverDetailPanel({ driver, onClose }) {
   );
 }
 
-export default function AdminDashboard() {
+function AdminAuthScreen({ onAuthed }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setError("");
+    setBusy(true);
+    try {
+      const admin = await loginAdmin({ email: email.trim().toLowerCase(), password });
+      onAuthed(admin);
+    } catch (err) {
+      setError(err.message?.replace("Firebase: ", "") || "Login failed.");
+    }
+    setBusy(false);
+  };
+
+  return (
+    <div className="w-full min-h-screen flex items-center justify-center px-8" style={{ background: BG }}>
+      <form onSubmit={submit} className="w-full max-w-sm space-y-3">
+        <h1 className="text-xl font-semibold mb-4" style={{ color: TEXT }}>Corporate Login</h1>
+        <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" type="email"
+          className="w-full px-4 py-3 rounded-xl text-sm outline-none" style={{ background: CARD, color: TEXT, border: `1px solid ${BORDER}` }} />
+        <input value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" type="password"
+          className="w-full px-4 py-3 rounded-xl text-sm outline-none" style={{ background: CARD, color: TEXT, border: `1px solid ${BORDER}` }} />
+        {error && <p className="text-sm" style={{ color: "#FF6B6B" }}>{error}</p>}
+        <button type="submit" disabled={busy} className="w-full py-3 rounded-xl font-medium text-sm" style={{ background: ACCENT, color: "#111318" }}>
+          {busy ? "One sec…" : "Log in"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
+function AdminDashboard() {
   const [rides, setRides] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [riders, setRiders] = useState([]);
@@ -253,7 +286,6 @@ export default function AdminDashboard() {
     return () => { unsub1(); unsub2(); unsub3(); };
   }, []);
 
-  // Keep the open panel's data live as Firestore updates come in.
   useEffect(() => {
     if (!selectedDriver) return;
     const fresh = drivers.find((d) => d.uid === selectedDriver.uid);
@@ -382,4 +414,10 @@ export default function AdminDashboard() {
       {selectedDriver && <DriverDetailPanel driver={selectedDriver} onClose={() => setSelectedDriver(null)} />}
     </div>
   );
+}
+
+export default function AdminPage() {
+  const [admin, setAdmin] = useState(null);
+  if (!admin) return <AdminAuthScreen onAuthed={setAdmin} />;
+  return <AdminDashboard />;
 }
