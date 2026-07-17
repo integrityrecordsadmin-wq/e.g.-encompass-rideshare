@@ -667,7 +667,7 @@ export default function RiderApp() {
       {screen === "home" && <HomeScreen user={user} onRequest={() => setScreen("destination")} onLogout={async () => { await signOut(); setUser(null); }} onSafety={() => setScreen("safety")} />}
       {screen === "safety" && <SafetyToolkitScreen user={user} onBack={() => setScreen("home")} onUpdateUser={setUser} />}
       {screen === "destination" && <DestinationScreen onBack={() => setScreen("home")} onConfirm={handleConfirmDestination} />}
-      {screen === "finding" && <FindingDriverScreen rideId={rideId} destination={destination} onAccepted={handleAccepted} />}
+      {screen === "finding" && <FindingDriverScreen rideId={rideId} destination={destination} onAccepted={handleAccepted} onCancelled={() => setScreen("home")} />}
       {screen === "tracking" && <TrackingScreen rideId={rideId} destination={destination} onComplete={handleComplete} />}
       {screen === "complete" && <CompleteScreen destination={destination} driverName={finalDriverName} onDone={() => setScreen("home")} />}
     </div>
