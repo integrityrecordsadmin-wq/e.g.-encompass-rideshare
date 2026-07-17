@@ -1,8 +1,12 @@
+
 "use client";
 import { useState, useEffect } from "react";
-import { Car, User, DollarSign, Search, CheckCircle2, CircleDot, Star, AlertTriangle } from "lucide-react";
+import { Car, User, DollarSign, Search, CheckCircle2, CircleDot, Star, AlertTriangle, X } from "lucide-react";
 import { ACCENT, AMBER, BG, CARD, BORDER, MUTED, TEXT } from "../../lib/tokens";
-import { subscribeToAllRides, subscribeToDrivers, subscribeToRiders } from "../../lib/db";
+import {
+  subscribeToAllRides, subscribeToDrivers, subscribeToRiders,
+  scheduleVerificationCall, reviewDriverDocuments, updateDriverProfile,
+} from "../../lib/db";
 
 const STATUS_META = {
   requested: { label: "Requested", color: MUTED },
@@ -10,6 +14,14 @@ const STATUS_META = {
   arrived_pickup: { label: "At pickup", color: AMBER },
   in_progress: { label: "In progress", color: AMBER },
   completed: { label: "Completed", color: "#4ADE80" },
+};
+
+const DOC_STATUS_META = {
+  not_submitted: { label: "Not submitted", color: MUTED },
+  call_scheduled: { label: "Call scheduled", color: ACCENT },
+  pending_review: { label: "Pending review", color: AMBER },
+  approved: { label: "Approved", color: "#4ADE80" },
+  rejected: { label: "Rejected", color: "#FF6B6B" },
 };
 
 function timeAgo(ts) {
@@ -21,10 +33,15 @@ function timeAgo(ts) {
   return `${Math.floor(mins / 60)}h ago`;
 }
 
-// Days remaining until a timestamp (can be negative if already passed).
 function daysUntil(ts) {
   if (!ts) return null;
   return Math.ceil((ts - Date.now()) / (1000 * 60 * 60 * 24));
+}
+
+// Convert a stored timestamp (ms) to a value usable in a <input type="date">.
+function tsToDateInput(ts) {
+  if (!ts) return "";
+  return new Date(ts).toISOString().slice(0, 10);
 }
 
 function StatCard({ icon: Icon, label, value, accent }) {
@@ -51,8 +68,6 @@ function StatusPill({ status }) {
   );
 }
 
-// Banner listing drivers whose insurance expires within 5 days (or already
-// expired). Shows nothing if no one is in that window.
 function InsuranceExpiryBanner({ drivers }) {
   const flagged = drivers
     .map((d) => ({ ...d, daysLeft: daysUntil(d.insuranceExpiresAt) }))
@@ -86,12 +101,150 @@ function InsuranceExpiryBanner({ drivers }) {
   );
 }
 
+// Slide-over panel for reviewing/managing one driver: verification call
+// scheduling, document approval, insurance date, background check status.
+function DriverDetailPanel({ driver, onClose }) {
+  const [callDate, setCallDate] = useState("");
+  const [callTime, setCallTime] = useState("");
+  const [zoomLink, setZoomLink] = useState(driver.verificationZoomLink || "");
+  const [insuranceDate, setInsuranceDate] = useState(tsToDateInput(driver.insuranceExpiresAt));
+  const [rejectReason, setRejectReason] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const docStatus = DOC_STATUS_META[driver.backgroundCheckStatus === "cleared" ? driver.documentsStatus : driver.documentsStatus] || DOC_STATUS_META.not_submitted;
+
+  const handleScheduleCall = async () => {
+    if (!callDate || !callTime || !zoomLink.trim()) return;
+    setBusy(true);
+    const scheduledAt = new Date(`${callDate}T${callTime}`).getTime();
+    await scheduleVerificationCall(driver.uid, { scheduledAt, zoomLink: zoomLink.trim() });
+    setBusy(false);
+  };
+
+  const handleApprove = async () => {
+    setBusy(true);
+    await reviewDriverDocuments(driver.uid, true);
+    setBusy(false);
+  };
+
+  const handleReject = async () => {
+    setBusy(true);
+    await reviewDriverDocuments(driver.uid, false, rejectReason.trim());
+    setRejectReason("");
+    setBusy(false);
+  };
+
+  const handleSaveInsuranceDate = async () => {
+    if (!insuranceDate) return;
+    setBusy(true);
+    await updateDriverProfile(driver.uid, { insuranceExpiresAt: new Date(insuranceDate).getTime() });
+    setBusy(false);
+  };
+
+  const handleBackgroundCheckToggle = async (status) => {
+    setBusy(true);
+    await updateDriverProfile(driver.uid, { backgroundCheckStatus: status });
+    setBusy(false);
+  };
+
+  return (
+    <div className="fixed inset-0 z-50 flex items-stretch justify-end" style={{ background: "rgba(0,0,0,0.5)" }} onClick={onClose}>
+      <div className="w-full max-w-md h-full overflow-y-auto p-6" style={{ background: BG }} onClick={(e) => e.stopPropagation()}>
+        <div className="flex items-center justify-between mb-6">
+          <div>
+            <h2 className="text-lg font-semibold" style={{ color: TEXT }}>{driver.name}</h2>
+            <p className="text-xs" style={{ color: MUTED }}>{driver.email}</p>
+          </div>
+          <button onClick={onClose} aria-label="Close" className="w-8 h-8 rounded-full flex items-center justify-center" style={{ background: CARD }}>
+            <X size={16} color={TEXT} />
+          </button>
+        </div>
+
+        <div className="space-y-6">
+          <div className="rounded-xl p-3 flex items-center justify-between" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
+            <span className="text-xs" style={{ color: MUTED }}>Vehicle</span>
+            <span className="text-sm" style={{ color: TEXT }}>{driver.carModel} · {driver.plate}</span>
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold mb-2 uppercase tracking-wide" style={{ color: MUTED }}>Background check</p>
+            <div className="flex gap-2">
+              {["pending", "cleared", "failed"].map((s) => (
+                <button key={s} disabled={busy} onClick={() => handleBackgroundCheckToggle(s)}
+                  className="flex-1 py-2 rounded-lg text-xs font-medium capitalize"
+                  style={{
+                    background: driver.backgroundCheckStatus === s ? ACCENT : CARD,
+                    color: driver.backgroundCheckStatus === s ? "#111318" : TEXT,
+                    border: `1px solid ${BORDER}`,
+                  }}>
+                  {s}
+                </button>
+              ))}
+            </div>
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold mb-2 uppercase tracking-wide" style={{ color: MUTED }}>Documents & vehicle verification</p>
+            <div className="rounded-xl p-3 mb-3" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
+              <StatusPill status={driver.documentsStatus || "not_submitted"} />
+            </div>
+
+            {driver.documentsStatus === "rejected" && driver.documentsRejectionReason && (
+              <p className="text-xs mb-3" style={{ color: "#FF6B6B" }}>Last rejection reason: {driver.documentsRejectionReason}</p>
+            )}
+
+            <p className="text-xs mb-2" style={{ color: MUTED }}>Schedule verification call</p>
+            <div className="flex gap-2 mb-2">
+              <input type="date" value={callDate} onChange={(e) => setCallDate(e.target.value)}
+                className="flex-1 px-3 py-2 rounded-lg text-sm outline-none" style={{ background: CARD, color: TEXT, border: `1px solid ${BORDER}` }} />
+              <input type="time" value={callTime} onChange={(e) => setCallTime(e.target.value)}
+                className="flex-1 px-3 py-2 rounded-lg text-sm outline-none" style={{ background: CARD, color: TEXT, border: `1px solid ${BORDER}` }} />
+            </div>
+            <input value={zoomLink} onChange={(e) => setZoomLink(e.target.value)} placeholder="Zoom link"
+              className="w-full px-3 py-2 rounded-lg text-sm outline-none mb-2" style={{ background: CARD, color: TEXT, border: `1px solid ${BORDER}` }} />
+            <button disabled={busy} onClick={handleScheduleCall}
+              className="w-full py-2.5 rounded-lg text-sm font-medium mb-4" style={{ background: ACCENT, color: "#111318" }}>
+              Schedule call
+            </button>
+
+            <div className="flex gap-2 mb-2">
+              <button disabled={busy} onClick={handleApprove}
+                className="flex-1 py-2.5 rounded-lg text-sm font-medium" style={{ background: "#1D3A2A", color: "#4ADE80", border: "1px solid #2A5138" }}>
+                Approve
+              </button>
+              <button disabled={busy} onClick={handleReject}
+                className="flex-1 py-2.5 rounded-lg text-sm font-medium" style={{ background: "#3D1F1F", color: "#FF6B6B", border: "1px solid #6B2E2E" }}>
+                Reject
+              </button>
+            </div>
+            <input value={rejectReason} onChange={(e) => setRejectReason(e.target.value)} placeholder="Reason (if rejecting)"
+              className="w-full px-3 py-2 rounded-lg text-sm outline-none" style={{ background: CARD, color: TEXT, border: `1px solid ${BORDER}` }} />
+          </div>
+
+          <div>
+            <p className="text-xs font-semibold mb-2 uppercase tracking-wide" style={{ color: MUTED }}>Insurance expiration</p>
+            <div className="flex gap-2">
+              <input type="date" value={insuranceDate} onChange={(e) => setInsuranceDate(e.target.value)}
+                className="flex-1 px-3 py-2 rounded-lg text-sm outline-none" style={{ background: CARD, color: TEXT, border: `1px solid ${BORDER}` }} />
+              <button disabled={busy} onClick={handleSaveInsuranceDate}
+                className="px-4 py-2 rounded-lg text-sm font-medium" style={{ background: ACCENT, color: "#111318" }}>
+                Save
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 export default function AdminDashboard() {
   const [rides, setRides] = useState([]);
   const [drivers, setDrivers] = useState([]);
   const [riders, setRiders] = useState([]);
   const [filter, setFilter] = useState("all");
   const [query, setQuery] = useState("");
+  const [selectedDriver, setSelectedDriver] = useState(null);
 
   useEffect(() => {
     const unsub1 = subscribeToAllRides(setRides);
@@ -99,6 +252,13 @@ export default function AdminDashboard() {
     const unsub3 = subscribeToRiders(setRiders);
     return () => { unsub1(); unsub2(); unsub3(); };
   }, []);
+
+  // Keep the open panel's data live as Firestore updates come in.
+  useEffect(() => {
+    if (!selectedDriver) return;
+    const fresh = drivers.find((d) => d.uid === selectedDriver.uid);
+    if (fresh) setSelectedDriver(fresh);
+  }, [drivers]);
 
   const filteredRides = rides.filter((r) => {
     const matchesStatus = filter === "all" || r.status === filter;
@@ -180,7 +340,8 @@ export default function AdminDashboard() {
                   <div className="p-4 text-center text-xs" style={{ color: MUTED, background: CARD }}>No drivers registered yet.</div>
                 ) : (
                   drivers.map((d, i) => (
-                    <div key={d.uid} className="p-3 flex items-center gap-3" style={{ background: CARD, borderTop: i > 0 ? `1px solid ${BORDER}` : "none" }}>
+                    <button key={d.uid} onClick={() => setSelectedDriver(d)}
+                      className="w-full p-3 flex items-center gap-3 text-left" style={{ background: CARD, borderTop: i > 0 ? `1px solid ${BORDER}` : "none" }}>
                       <div className="w-8 h-8 rounded-full flex items-center justify-center flex-shrink-0" style={{ background: "#23262E" }}><User size={14} color={TEXT} /></div>
                       <div className="flex-1 min-w-0">
                         <p className="text-xs font-medium truncate" style={{ color: TEXT }}>{d.name}</p>
@@ -190,7 +351,7 @@ export default function AdminDashboard() {
                         <p className="text-xs font-medium" style={{ color: AMBER }}>${(d.earningsToday || 0).toFixed(0)}</p>
                         <p className="text-xs flex items-center gap-0.5 justify-end" style={{ color: MUTED }}><Star size={9} fill={AMBER} color={AMBER} /> {(d.rating || 5).toFixed(1)}</p>
                       </div>
-                    </div>
+                    </button>
                   ))
                 )}
               </div>
@@ -217,6 +378,8 @@ export default function AdminDashboard() {
           </div>
         </div>
       </div>
+
+      {selectedDriver && <DriverDetailPanel driver={selectedDriver} onClose={() => setSelectedDriver(null)} />}
     </div>
   );
 }
