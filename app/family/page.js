@@ -1,11 +1,13 @@
+
 "use client";
 
 import { useState, useEffect } from "react";
-import { Users, Heart, Copy, LogOut } from "lucide-react";
+import { Users, Heart, Copy, LogOut, Car, DollarSign, AlertTriangle, Megaphone } from "lucide-react";
 import { ACCENT, AMBER } from "../../lib/tokens";
 import {
   signUpFamily, loginFamily, resetPassword,
   createFamily, joinFamily, subscribeToFamily, leaveFamily, getFamilyMembers, removeFamilyMember,
+  getMemberRideActivity, subscribeToActiveAnnouncements,
 } from "../../lib/db";
 
 function FamilyAuthScreen({ onAuthed }) {
@@ -187,6 +189,161 @@ function CreateOrJoinScreen({ person, onFamilyReady }) {
   );
 }
 
+const FEED_COLORS = ["#6C5CE7", "#FFB020", "#4ADE80", "#FB7185", "#38BDF8", "#F472B6"];
+
+const STATUS_LABEL = {
+  requested: "Requested",
+  accepted: "Accepted",
+  arrived_pickup: "Driver arrived",
+  in_progress: "In progress",
+  completed: "Completed",
+  cancelled: "Cancelled",
+};
+
+function dayLabel(ts) {
+  const d = new Date(ts);
+  const today = new Date();
+  const yesterday = new Date();
+  yesterday.setDate(today.getDate() - 1);
+  const sameDay = (a, b) => a.toDateString() === b.toDateString();
+  if (sameDay(d, today)) return "Today";
+  if (sameDay(d, yesterday)) return "Yesterday";
+  return d.toLocaleDateString(undefined, { month: "short", day: "numeric" });
+}
+
+function timeLabel(ts) {
+  return new Date(ts).toLocaleTimeString(undefined, { hour: "numeric", minute: "2-digit" });
+}
+
+function ActivityFeed({ members }) {
+  const [feed, setFeed] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function load() {
+      if (!members.length) { setFeed([]); setLoading(false); return; }
+      setLoading(true);
+      const colorByUid = {};
+      members.forEach((m, i) => { colorByUid[m.uid] = FEED_COLORS[i % FEED_COLORS.length]; });
+      const results = await Promise.all(
+        members.map(async (m) => {
+          const rides = await getMemberRideActivity(m.uid);
+          return rides.map((r) => ({ ...r, memberName: m.name, memberColor: colorByUid[m.uid] }));
+        })
+      );
+      const merged = results.flat().sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0)).slice(0, 40);
+      if (!cancelled) { setFeed(merged); setLoading(false); }
+    }
+    load();
+    return () => { cancelled = true; };
+  }, [members]);
+
+  if (loading) {
+    return <p className="text-xs text-center py-6" style={{ color: "#7A7F8A" }}>Loading activity…</p>;
+  }
+
+  if (!feed.length) {
+    return (
+      <div className="rounded-xl p-4 text-center text-xs mt-2" style={{ color: "#7A7F8A", border: "1px dashed #2B2F3A" }}>
+        No rides yet. Once a family member takes a ride, it'll show up here.
+      </div>
+    );
+  }
+
+  let lastDay = null;
+  return (
+    <div className="space-y-1">
+      {feed.map((item) => {
+        const day = dayLabel(item.createdAt);
+        const showDay = day !== lastDay;
+        lastDay = day;
+        const firstName = item.memberName?.split(" ")[0] || "Someone";
+        const verb = item.memberRole === "driver" ? "drove to" : "rode to";
+        return (
+          <div key={item.id}>
+            {showDay && (
+              <p className="text-xs uppercase tracking-wide mt-3 mb-1" style={{ color: "#7A7F8A" }}>{day}</p>
+            )}
+            <div className="flex items-start gap-3 rounded-xl p-3"
+              style={{ background: "#181B22", border: "1px solid #2B2F3A" }}>
+              <div className="w-8 h-8 rounded-full flex items-center justify-center font-semibold text-xs flex-shrink-0"
+                style={{ background: item.memberColor, color: "#111318" }}>
+                {firstName[0]?.toUpperCase()}
+              </div>
+              <div className="flex-1 min-w-0">
+                <p className="text-sm font-medium truncate" style={{ color: "#F5F5F0" }}>
+                  {firstName} — {verb} {item.destination}
+                </p>
+                <p className="text-xs mt-0.5" style={{ color: "#7A7F8A" }}>
+                  {item.vehicleType || "standard"} · {item.miles ?? "—"} mi
+                </p>
+                <p className="text-xs mt-0.5" style={{ color: "#7A7F8A" }}>
+                  {STATUS_LABEL[item.status] || item.status} · {timeLabel(item.createdAt)}
+                </p>
+              </div>
+              {item.fare != null && (
+                <p className="text-sm font-semibold flex-shrink-0" style={{ color: AMBER }}>${item.fare.toFixed(2)}</p>
+              )}
+            </div>
+          </div>
+        );
+      })}
+    </div>
+  );
+}
+
+function AlertBanners() {
+  const [amberAlerts, setAmberAlerts] = useState([]);
+  const [announcements, setAnnouncements] = useState([]);
+
+  useEffect(() => {
+    let cancelled = false;
+    async function loadAmber() {
+      try {
+        const res = await fetch("/api/amber-alerts");
+        const data = await res.json();
+        if (!cancelled) setAmberAlerts(data.alerts || []);
+      } catch (e) {
+        if (!cancelled) setAmberAlerts([]);
+      }
+    }
+    loadAmber();
+    const interval = setInterval(loadAmber, 5 * 60 * 1000);
+    return () => { cancelled = true; clearInterval(interval); };
+  }, []);
+
+  useEffect(() => {
+    const unsub = subscribeToActiveAnnouncements(setAnnouncements);
+    return unsub;
+  }, []);
+
+  if (!amberAlerts.length && !announcements.length) return null;
+
+  return (
+    <div className="px-6 pt-2 space-y-2">
+      {amberAlerts.map((a) => (
+        <div key={a.id} className="rounded-xl p-3 flex items-start gap-2.5"
+          style={{ background: "rgba(255,176,32,0.14)", border: `1px solid ${AMBER}` }}>
+          <AlertTriangle size={16} color={AMBER} className="flex-shrink-0 mt-0.5" />
+          <div className="min-w-0">
+            <p className="text-xs font-bold uppercase tracking-wide" style={{ color: AMBER }}>AMBER Alert</p>
+            <p className="text-sm font-medium mt-0.5" style={{ color: "#F5F5F0" }}>{a.headline}</p>
+            <p className="text-xs mt-1" style={{ color: "#B9BBC2" }}>{a.areaDesc}</p>
+          </div>
+        </div>
+      ))}
+      {announcements.map((m) => (
+        <div key={m.id} className="rounded-xl p-3 flex items-start gap-2.5"
+          style={{ background: "rgba(108,92,231,0.12)", border: `1px solid ${ACCENT}` }}>
+          <Megaphone size={16} color={ACCENT} className="flex-shrink-0 mt-0.5" />
+          <p className="text-sm" style={{ color: "#F5F5F0" }}>{m.text}</p>
+        </div>
+      ))}
+    </div>
+  );
+}
+
 function FamilyDashboard({ person, family, onLogout }) {
   const [members, setMembers] = useState([]);
   const [copied, setCopied] = useState(false);
@@ -220,6 +377,8 @@ function FamilyDashboard({ person, family, onLogout }) {
         <p className="text-sm font-medium mt-0.5" style={{ color: ACCENT }}>Parental Control</p>
       </div>
 
+      <AlertBanners />
+
       {isGuardian && (
         <div className="mx-6 mb-4 rounded-2xl p-4 flex items-center justify-between"
           style={{ background: "#181B22", border: "1px solid #2B2F3A" }}>
@@ -234,44 +393,49 @@ function FamilyDashboard({ person, family, onLogout }) {
         </div>
       )}
 
-      <div className="px-6 mb-2">
-        <p className="text-xs uppercase tracking-wide" style={{ color: "#7A7F8A" }}>
-          {members.length} {members.length === 1 ? "member" : "members"}
-        </p>
-      </div>
-      <div className="px-6 space-y-2 flex-1 overflow-y-auto">
-        {members.map((m) => {
-          const role = family.roles?.[m.uid] || "member";
-          return (
-            <div key={m.uid} className="flex items-center gap-3 rounded-xl p-3"
-              style={{ background: "#181B22", border: "1px solid #2B2F3A" }}>
-              <div className="w-9 h-9 rounded-full flex items-center justify-center font-semibold text-sm"
-                style={{ background: ACCENT, color: "#111318" }}>
-                {m.name?.[0]?.toUpperCase() || "?"}
-              </div>
-              <div className="flex-1">
-                <p className="text-sm font-medium" style={{ color: "#F5F5F0" }}>{m.name?.split(" ")[0]}</p>
-                <p className="text-xs" style={{ color: role === "guardian" ? ACCENT : "#7A7F8A" }}>
-                  {role === "guardian" ? "Guardian" : "Member"}
-                </p>
-              </div>
-              {m.uid === person.uid ? (
-                <span className="text-xs" style={{ color: "#7A7F8A" }}>You</span>
-              ) : (
-                isGuardian && role !== "guardian" && (
-                  <button onClick={() => handleRemove(m.uid)}
-                    className="text-xs px-2.5 py-1.5 rounded-lg font-medium"
-                    style={{ background: "#1D2028", color: "#FF6B6B" }}>
-                    Remove
-                  </button>
-                )
-              )}
-            </div>
-          );
-        })}
-        <div className="rounded-xl p-4 text-center text-xs mt-2" style={{ color: "#7A7F8A", border: "1px dashed #2B2F3A" }}>
-          Rides and jobs activity feed coming next.
+      <div className="px-6 flex-1 overflow-y-auto">
+        <div className="mb-2">
+          <p className="text-xs uppercase tracking-wide" style={{ color: "#7A7F8A" }}>
+            {members.length} {members.length === 1 ? "member" : "members"}
+          </p>
         </div>
+        <div className="space-y-2 mb-5">
+          {members.map((m) => {
+            const role = family.roles?.[m.uid] || "member";
+            return (
+              <div key={m.uid} className="flex items-center gap-3 rounded-xl p-3"
+                style={{ background: "#181B22", border: "1px solid #2B2F3A" }}>
+                <div className="w-9 h-9 rounded-full flex items-center justify-center font-semibold text-sm"
+                  style={{ background: ACCENT, color: "#111318" }}>
+                  {m.name?.[0]?.toUpperCase() || "?"}
+                </div>
+                <div className="flex-1">
+                  <p className="text-sm font-medium" style={{ color: "#F5F5F0" }}>{m.name?.split(" ")[0]}</p>
+                  <p className="text-xs" style={{ color: role === "guardian" ? ACCENT : "#7A7F8A" }}>
+                    {role === "guardian" ? "Guardian" : "Member"}
+                  </p>
+                </div>
+                {m.uid === person.uid ? (
+                  <span className="text-xs" style={{ color: "#7A7F8A" }}>You</span>
+                ) : (
+                  isGuardian && role !== "guardian" && (
+                    <button onClick={() => handleRemove(m.uid)}
+                      className="text-xs px-2.5 py-1.5 rounded-lg font-medium"
+                      style={{ background: "#1D2028", color: "#FF6B6B" }}>
+                      Remove
+                    </button>
+                  )
+                )}
+              </div>
+            );
+          })}
+        </div>
+
+        <div className="mb-2 flex items-center gap-2">
+          <Car size={13} color="#7A7F8A" />
+          <p className="text-xs uppercase tracking-wide" style={{ color: "#7A7F8A" }}>Recent activity</p>
+        </div>
+        <ActivityFeed members={members} />
       </div>
 
       <div className="px-6 py-5">
