@@ -427,7 +427,11 @@ function FindingDriverScreen({ rideId, destination, onAccepted, onCancelled }) {
     </div>
   );
 }
-    
+    }
+
+function FamilyWatchModal({ ride, onClose }) {
+  return (
+    <div className="fixed inset-0 z-50 overflow-y-auto" style={{ background: FAMILY.bg }}>
     <div className="fixed inset-0 z-50 overflow-y-auto" style={{ background: FAMILY.bg }}>
       <div className="w-full max-w-sm mx-auto px-5 py-8">
         <button onClick={onClose} className="mb-4 text-sm font-medium" style={{ color: FAMILY.plumSoft }}>← Back to tracking</button>
