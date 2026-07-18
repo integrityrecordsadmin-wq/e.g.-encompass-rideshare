@@ -279,12 +279,100 @@ export default function FamilyApp() {
       ) : !person.familyId && !family ? (
         <CreateOrJoinScreen person={person} onFamilyReady={(f) => setPerson({ ...person, familyId: f.id })} />
       ) : family ? (
-        <FamilyDashboard person={person} family={family} onLogout={() => { setPerson(null); setFamily(null); }} />
-      ) : (
-        <div className="w-full h-full flex items-center justify-center" style={{ background: "#111318" }}>
-          <p style={{ color: "#7A7F8A" }}>Loading…</p>
+        function FamilyDashboard({ person, family, onLogout }) {
+  const [members, setMembers] = useState([]);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    if (family?.memberUids?.length) getFamilyMembers(family.memberUids).then(setMembers);
+  }, [family?.memberUids]);
+
+  const myRole = family.roles?.[person.uid] || "member";
+  const isGuardian = myRole === "guardian";
+
+  const copyCode = () => {
+    navigator.clipboard?.writeText(family.inviteCode);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+
+  const handleLeave = async () => {
+    await leaveFamily(person, family.id);
+    onLogout();
+  };
+
+  const handleRemove = async (targetUid) => {
+    await removeFamilyMember(family.id, targetUid);
+  };
+
+  return (
+    <div className="w-full h-full flex flex-col" style={{ background: "#111318" }}>
+      <div className="px-6 pt-8 pb-4">
+        <h1 className="text-2xl font-semibold" style={{ color: "#F5F5F0" }}>Family Hub</h1>
+        <p className="text-sm font-medium mt-0.5" style={{ color: ACCENT }}>Parental Control</p>
+      </div>
+
+      {isGuardian && (
+        <div className="mx-6 mb-4 rounded-2xl p-4 flex items-center justify-between"
+          style={{ background: "#181B22", border: "1px solid #2B2F3A" }}>
+          <div>
+            <p className="text-xs" style={{ color: "#7A7F8A" }}>Invite code</p>
+            <p className="text-lg font-semibold tracking-widest" style={{ color: "#F5F5F0" }}>{family.inviteCode}</p>
+          </div>
+          <button onClick={copyCode} className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-xs font-medium"
+            style={{ background: "#111318", color: ACCENT }}>
+            <Copy size={13} /> {copied ? "Copied!" : "Copy"}
+          </button>
         </div>
       )}
+
+      <div className="px-6 mb-2">
+        <p className="text-xs uppercase tracking-wide" style={{ color: "#7A7F8A" }}>
+          {members.length} {members.length === 1 ? "member" : "members"}
+        </p>
+      </div>
+      <div className="px-6 space-y-2 flex-1 overflow-y-auto">
+        {members.map((m) => {
+          const role = family.roles?.[m.uid] || "member";
+          return (
+            <div key={m.uid} className="flex items-center gap-3 rounded-xl p-3"
+              style={{ background: "#181B22", border: "1px solid #2B2F3A" }}>
+              <div className="w-9 h-9 rounded-full flex items-center justify-center font-semibold text-sm"
+                style={{ background: ACCENT, color: "#111318" }}>
+                {m.name?.[0]?.toUpperCase() || "?"}
+              </div>
+              <div className="flex-1">
+                <p className="text-sm font-medium" style={{ color: "#F5F5F0" }}>{m.name?.split(" ")[0]}</p>
+                <p className="text-xs" style={{ color: role === "guardian" ? ACCENT : "#7A7F8A" }}>
+                  {role === "guardian" ? "Guardian" : "Member"}
+                </p>
+              </div>
+              {m.uid === person.uid ? (
+                <span className="text-xs" style={{ color: "#7A7F8A" }}>You</span>
+              ) : (
+                isGuardian && role !== "guardian" && (
+                  <button onClick={() => handleRemove(m.uid)}
+                    className="text-xs px-2.5 py-1.5 rounded-lg font-medium"
+                    style={{ background: "#1D2028", color: "#FF6B6B" }}>
+                    Remove
+                  </button>
+                )
+              )}
+            </div>
+          );
+        })}
+        <div className="rounded-xl p-4 text-center text-xs mt-2" style={{ color: "#7A7F8A", border: "1px dashed #2B2F3A" }}>
+          Rides and jobs activity feed coming next.
+        </div>
+      </div>
+
+      <div className="px-6 py-5">
+        <button onClick={handleLeave}
+          className="w-full py-3 rounded-xl font-medium text-sm flex items-center justify-center gap-2"
+          style={{ background: "#1D2028", color: "#FF6B6B", border: "1px solid #2B2F3A" }}>
+          <LogOut size={15} /> Leave family
+        </button>
+      </div>
     </div>
   );
 }
