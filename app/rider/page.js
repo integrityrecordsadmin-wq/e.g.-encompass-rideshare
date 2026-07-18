@@ -427,7 +427,7 @@ function FindingDriverScreen({ rideId, destination, onAccepted, onCancelled }) {
     </div>
   );
 }
-    }
+    
 
 function FamilyWatchModal({ ride, onClose }) {
   return (
