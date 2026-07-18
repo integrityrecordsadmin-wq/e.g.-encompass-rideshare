@@ -1,11 +1,12 @@
 
 "use client";
 import { useState, useEffect } from "react";
-import { Car, User, DollarSign, Search, CheckCircle2, CircleDot, Star, AlertTriangle, X } from "lucide-react";
+import { Car, User, DollarSign, Search, CheckCircle2, CircleDot, Star, AlertTriangle, X, Megaphone } from "lucide-react";
 import { ACCENT, AMBER, BG, CARD, BORDER, MUTED, TEXT } from "../../lib/tokens";
 import {
   subscribeToAllRides, subscribeToDrivers, subscribeToRiders,
   scheduleVerificationCall, reviewDriverDocuments, updateDriverProfile, loginAdmin,
+  subscribeToActiveAnnouncements, createAnnouncement, deactivateAnnouncement,
 } from "../../lib/db";
 
 const STATUS_META = {
@@ -235,6 +236,68 @@ function DriverDetailPanel({ driver, onClose }) {
   );
 }
 
+function AnnouncementsPanel() {
+  const [announcements, setAnnouncements] = useState([]);
+  const [text, setText] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    const unsub = subscribeToActiveAnnouncements(setAnnouncements);
+    return unsub;
+  }, []);
+
+  const handlePost = async () => {
+    if (!text.trim()) return;
+    setBusy(true);
+    await createAnnouncement({ text: text.trim(), createdBy: "admin" });
+    setText("");
+    setBusy(false);
+  };
+
+  const handleRemove = async (id) => {
+    await deactivateAnnouncement(id);
+  };
+
+  return (
+    <div>
+      <h2 className="text-sm font-semibold mb-3 flex items-center gap-2" style={{ color: TEXT }}>
+        <Megaphone size={15} color={ACCENT} /> Special messages
+      </h2>
+      <div className="rounded-2xl p-3 mb-3" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
+        <textarea value={text} onChange={(e) => setText(e.target.value)}
+          placeholder="Message for families (e.g. upcoming event, reminder)…"
+          rows={3}
+          className="w-full px-3 py-2 rounded-lg text-sm outline-none resize-none mb-2"
+          style={{ background: BG, color: TEXT, border: `1px solid ${BORDER}` }} />
+        <button disabled={busy || !text.trim()} onClick={handlePost}
+          className="w-full py-2 rounded-lg text-sm font-medium disabled:opacity-40"
+          style={{ background: ACCENT, color: "#111318" }}>
+          {busy ? "Posting…" : "Post message"}
+        </button>
+      </div>
+      <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${BORDER}` }}>
+        {announcements.length === 0 ? (
+          <div className="p-4 text-center text-xs" style={{ color: MUTED, background: CARD }}>No active messages.</div>
+        ) : (
+          announcements.map((a, i) => (
+            <div key={a.id} className="p-3 flex items-start gap-3" style={{ background: CARD, borderTop: i > 0 ? `1px solid ${BORDER}` : "none" }}>
+              <div className="flex-1 min-w-0">
+                <p className="text-xs" style={{ color: TEXT }}>{a.text}</p>
+                <p className="text-xs mt-1" style={{ color: MUTED }}>{timeAgo(a.createdAt)}</p>
+              </div>
+              <button onClick={() => handleRemove(a.id)}
+                className="text-xs px-2 py-1 rounded-lg font-medium flex-shrink-0"
+                style={{ background: "#3D1F1F", color: "#FF6B6B" }}>
+                Remove
+              </button>
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
 function AdminAuthScreen({ onAuthed }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -365,6 +428,8 @@ function AdminDashboard() {
           </div>
 
           <div className="space-y-6">
+            <AnnouncementsPanel />
+
             <div>
               <h2 className="text-sm font-semibold mb-3 flex items-center gap-2" style={{ color: TEXT }}><Car size={15} color={ACCENT} /> Drivers ({drivers.length})</h2>
               <div className="rounded-2xl overflow-hidden" style={{ border: `1px solid ${BORDER}` }}>
