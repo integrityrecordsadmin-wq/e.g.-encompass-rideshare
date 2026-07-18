@@ -54,11 +54,14 @@ function FamilyAuthScreen({ onAuthed }) {
           <Heart size={20} color="#111318" strokeWidth={2.5} />
         </div>
         <h1 className="text-3xl font-semibold tracking-tight" style={{ color: "#F5F5F0" }}>
-          {mode === "login" ? "Welcome back" : "Family Hub"}
-        </h1>
-        <p className="mt-1 text-sm" style={{ color: "#7A7F8A" }}>
-          {mode === "login" ? "Log in to your family hub." : "See rides and jobs across your whole family."}
-        </p>
+  Family Hub
+</h1>
+<p className="mt-1 text-sm font-medium" style={{ color: ACCENT }}>
+  Parental Control
+</p>
+<p className="mt-2 text-sm" style={{ color: "#7A7F8A" }}>
+  {mode === "login" ? "Log in to see rides and jobs across your whole family." : "Create your account to get started."}
+</p>
       </div>
       <form onSubmit={submit} className="space-y-3">
         {mode === "signup" && (
