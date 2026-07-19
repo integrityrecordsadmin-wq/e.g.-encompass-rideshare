@@ -13,6 +13,7 @@ import { VEHICLE_TYPES } from "../../lib/vehicleTypes";
 import {
   signUpRider, loginRider, signOut, updateRiderProfile,
   createRide, subscribeToRide, resetPassword, createFamilyRideRoom, getOnlineDriverTokens,
+  loginWithGoogleRider,
 } from "../../lib/db";
 import { sendPushNotification } from "../../lib/messaging";
 
@@ -103,6 +104,18 @@ function AuthScreen({ onAuthed }) {
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    setError("");
+    setBusy(true);
+    try {
+      const user = await loginWithGoogleRider();
+      onAuthed(user);
+    } catch (err) {
+      setError(err.message?.replace("Firebase: ", "") || "Google sign-in failed.");
+    }
+    setBusy(false);
+  };
+
   const isLastStep = step === steps.length - 1;
 
   const titles = {
@@ -127,6 +140,21 @@ function AuthScreen({ onAuthed }) {
       </div>
 
       <div className="space-y-3">
+        {current === "email" && (
+          <>
+            <button type="button" onClick={handleGoogleSignIn} disabled={busy}
+              className="w-full py-3.5 rounded-xl font-medium text-base flex items-center justify-center gap-2.5"
+              style={{ background: "#F5F5F0", color: "#111318" }}>
+              <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84c-.21 1.13-.84 2.09-1.79 2.73v2.27h2.9c1.7-1.56 2.68-3.87 2.68-6.64z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.27c-.81.54-1.84.86-3.06.86-2.35 0-4.34-1.59-5.05-3.72H.95v2.34C2.44 15.98 5.48 18 9 18z"/><path fill="#FBBC05" d="M3.95 10.69c-.18-.54-.28-1.11-.28-1.69s.1-1.15.28-1.69V4.97H.95C.35 6.17 0 7.55 0 9s.35 2.83.95 4.03l3-2.34z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.51.46 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0 5.48 0 2.44 2.02.95 4.97l3 2.34C4.66 5.17 6.65 3.58 9 3.58z"/></svg>
+              Continue with Google
+            </button>
+            <div className="flex items-center gap-3 py-1">
+              <div className="flex-1 h-px" style={{ background: "#2B2F3A" }} />
+              <span className="text-xs" style={{ color: "#7A7F8A" }}>or</span>
+              <div className="flex-1 h-px" style={{ background: "#2B2F3A" }} />
+            </div>
+          </>
+        )}
         {current === "email" && (
           <input autoFocus value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" type="email"
             autoComplete="email"
@@ -642,19 +670,19 @@ export default function RiderApp() {
   const [finalDriverName, setFinalDriverName] = useState("");
 
   const handleConfirmDestination = async (dest, vehicleType, finalFare, isFamilyRide) => {
-  setDestination(dest);
-  const trip = seededTrip(dest);
-  const id = await createRide({
-    riderName: user.name, riderUid: user.uid,
-    destination: dest, fare: finalFare, miles: trip.miles, minutes: trip.minutes,
-    vehicleType,
-    isFamilyRide: !!isFamilyRide,
-    riderRecording: !!user.audioRecordingEnabled,
-  });
-  if (isFamilyRide) {
-    try { await createFamilyRideRoom(id); } catch (e) { /* room creation failed — trip still proceeds without video */ }
-  }
-  try {
+    setDestination(dest);
+    const trip = seededTrip(dest);
+    const id = await createRide({
+      riderName: user.name, riderUid: user.uid,
+      destination: dest, fare: finalFare, miles: trip.miles, minutes: trip.minutes,
+      vehicleType,
+      isFamilyRide: !!isFamilyRide,
+      riderRecording: !!user.audioRecordingEnabled,
+    });
+    if (isFamilyRide) {
+      try { await createFamilyRideRoom(id); } catch (e) { /* room creation failed — trip still proceeds without video */ }
+    }
+    try {
       const tokens = await getOnlineDriverTokens(vehicleType);
       alert("Vehicle type: " + vehicleType + " | Tokens found: " + tokens.length + (tokens.length ? " | First: " + tokens[0].slice(0, 15) + "…" : ""));
       const results = await Promise.all(tokens.map((token) =>
@@ -669,8 +697,9 @@ export default function RiderApp() {
     } catch (e) {
       alert("PUSH ERROR: " + e.message);
     }
-};
- 
+    setRideId(id);
+    setScreen("finding");
+  };
 
   const handleAccepted = (ride) => { setFinalDriverName(ride.driverName || ""); setScreen("tracking"); };
   const handleComplete = (ride) => { setFinalDriverName(ride.driverName || ""); setScreen("complete"); };
