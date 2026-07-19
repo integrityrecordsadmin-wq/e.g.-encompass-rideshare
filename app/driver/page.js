@@ -45,6 +45,7 @@ function DriverAuthScreen({ onAuthed }) {
   const [busy, setBusy] = useState(false);
   const [resetSent, setResetSent] = useState(false);
   const [googlePending, setGooglePending] = useState(null);
+  const [showHelp, setShowHelp] = useState(false);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -100,26 +101,20 @@ function DriverAuthScreen({ onAuthed }) {
     (async () => {
       try {
         const result = await completeGoogleSignInDriver();
-        alert("Redirect result: " + JSON.stringify(result));
-        if (!result) { alert("BRANCH: result was null/falsy, returning"); return; }
+        if (!result) return;
         if (result.needsVehicleInfo) {
-          alert("BRANCH: needsVehicleInfo true, calling setGooglePending");
           setGooglePending(result);
           setName(result.name || "");
         } else {
-          alert("BRANCH: needsVehicleInfo false, calling onAuthed directly");
           onAuthed(result);
         }
       } catch (err) {
-        alert("REDIRECT ERROR: " + err.message);
         setError(err.message?.replace("Firebase: ", "") || "Google sign-in failed.");
       }
     })();
   }, []);
 
-
-
-      const submitGoogleVehicleInfo = async (e) => {
+  const submitGoogleVehicleInfo = async (e) => {
     e.preventDefault();
     setError("");
     if (!carModel || !plate) { setError("Fill in your car model and plate to continue."); return; }
@@ -284,6 +279,17 @@ function DriverAuthScreen({ onAuthed }) {
         {mode === "login" ? (<>New driver? <span style={{ color: "#F5F5F0" }}>Create an account</span></>)
           : (<>Already driving with us? <span style={{ color: "#F5F5F0" }}>Log in</span></>)}
       </button>
+      <button type="button" onClick={() => setShowHelp((s) => !s)}
+        className="mt-4 text-sm text-center font-medium" style={{ color: ACCENT }}>
+        Trouble signing in?
+      </button>
+      {showHelp && (
+        <div className="mt-3 rounded-xl p-3 text-xs leading-relaxed" style={{ background: "#1D2028", color: "#B9BBC2", border: "1px solid #2B2F3A" }}>
+          <p className="mb-1.5">• If "Continue with Google" doesn't finish, tap it again — sometimes it needs a second try.</p>
+          <p className="mb-1.5">• Use the same sign-in method (Google or email) every time — they don't share one account.</p>
+          <p>• Still stuck? Log in with email and password instead.</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -877,6 +883,74 @@ function ProfileScreen({ driver, onBack, onLogout }) {
 }
 
 // ---------- Root ----------
+// ---------- Waiting room gate: catches any account missing vehicle info ----------
+function VehicleInfoGateScreen({ driver, onComplete }) {
+  const [carModel, setCarModel] = useState("");
+  const [plate, setPlate] = useState("");
+  const [vehicleType, setVehicleType] = useState("standard");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setError("");
+    if (!carModel || !plate) { setError("Fill in your car model and plate to continue."); return; }
+    setBusy(true);
+    try {
+      await updateDriverProfile(driver.uid, { carModel, plate, vehicleType });
+      onComplete({ ...driver, carModel, plate, vehicleType });
+    } catch (err) {
+      setError(err.message?.replace("Firebase: ", "") || "Something went wrong.");
+    }
+    setBusy(false);
+  };
+
+  return (
+    <div className="min-h-full w-full flex flex-col justify-center px-8" style={{ background: "#111318" }}>
+      <div className="mb-8">
+        <div className="w-11 h-11 rounded-2xl mb-6 flex items-center justify-center" style={{ background: ACCENT }}>
+          <Car size={22} color="#111318" strokeWidth={2.5} />
+        </div>
+        <h1 className="text-3xl font-semibold tracking-tight" style={{ color: "#F5F5F0" }}>One more thing, {driver.name?.split(" ")[0]}</h1>
+        <p className="mt-1 text-sm" style={{ color: "#7A7F8A" }}>We need your vehicle details before you can go online.</p>
+      </div>
+      <form onSubmit={submit} className="space-y-3">
+        <div className="flex gap-3">
+          <input value={carModel} onChange={(e) => setCarModel(e.target.value)} placeholder="Car (e.g. Silver Camry)"
+            className="w-2/3 px-4 py-3.5 rounded-xl text-base outline-none"
+            style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
+          <input value={plate} onChange={(e) => setPlate(e.target.value)} placeholder="Plate"
+            className="w-1/3 px-4 py-3.5 rounded-xl text-base outline-none"
+            style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
+        </div>
+        <div>
+          <p className="text-xs mb-2" style={{ color: "#7A7F8A" }}>What do you drive?</p>
+          <div className="grid grid-cols-2 gap-2">
+            {VEHICLE_TYPES.map((v) => {
+              const Icon = v.icon;
+              const isSelected = vehicleType === v.id;
+              return (
+                <button key={v.id} type="button" onClick={() => setVehicleType(v.id)}
+                  className="flex items-center gap-2 p-3 rounded-xl text-left"
+                  style={{ background: isSelected ? ACCENT : "#1D2028", border: `1px solid ${isSelected ? ACCENT : "#2B2F3A"}` }}>
+                  <Icon size={16} color={isSelected ? "#111318" : "#F5F5F0"} />
+                  <span className="text-xs font-medium" style={{ color: isSelected ? "#111318" : "#F5F5F0" }}>{v.name}</span>
+                </button>
+              );
+            })}
+          </div>
+        </div>
+        {error && <p className="text-sm" style={{ color: "#FF6B6B" }}>{error}</p>}
+        <button type="submit" disabled={busy}
+          className="w-full py-3.5 rounded-xl font-medium text-base mt-2 transition active:scale-[0.98]"
+          style={{ background: ACCENT, color: "#111318" }}>
+          {busy ? "One sec…" : "Continue"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
 export default function DriverApp() {
   const [driver, setDriver] = useState(null);
   const [online, setOnline] = useState(false);
@@ -916,6 +990,15 @@ export default function DriverApp() {
       <div className="w-full h-screen max-w-sm mx-auto overflow-hidden sm:rounded-[2rem] sm:h-[700px] sm:my-8 relative"
         style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.4)" }}>
         <DriverAuthScreen onAuthed={(d) => setDriver(d)} />
+      </div>
+    );
+  }
+
+  if (!driver.carModel || !driver.plate) {
+    return (
+      <div className="w-full h-screen max-w-sm mx-auto overflow-hidden sm:rounded-[2rem] sm:h-[700px] sm:my-8 relative"
+        style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.4)" }}>
+        <VehicleInfoGateScreen driver={driver} onComplete={(updated) => setDriver(updated)} />
       </div>
     );
   }
