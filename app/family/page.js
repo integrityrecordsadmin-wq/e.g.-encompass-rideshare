@@ -7,53 +7,56 @@ import {
   signUpFamily, loginFamily, resetPassword,
   createFamily, joinFamily, subscribeToFamily, leaveFamily, getFamilyMembers, removeFamilyMember,
   getMemberRideActivity, subscribeToActiveAnnouncements,
+  startGoogleSignIn, completeGoogleSignInFamily, sendMagicLinkFamily, completeMagicLinkSignInFamily,
 } from "../../lib/db";
 
 function FamilyAuthScreen({ onAuthed }) {
-  const [mode, setMode] = useState("login");
-  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [resetSent, setResetSent] = useState(false);
+  const [linkSent, setLinkSent] = useState(false);
+  const [showHelp, setShowHelp] = useState(false);
 
-  const submit = async (e) => {
-    e.preventDefault();
+  const handleGoogleSignIn = async () => {
     setError("");
-    if (!email || !password || (mode === "signup" && !name)) {
-      setError("Fill in every field to continue.");
-      return;
+    setBusy(true);
+    try {
+      await startGoogleSignIn();
+    } catch (err) {
+      setError(err.message?.replace("Firebase: ", "") || "Google sign-in failed.");
+      setBusy(false);
     }
-    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+  };
+
+  const handleSendMagicLink = async () => {
+    setError("");
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailPattern.test(email.trim())) {
       setError("Enter a valid email address (e.g. name@example.com).");
       return;
     }
     setBusy(true);
     try {
-      const person = mode === "signup"
-        ? await signUpFamily({ name, email: email.trim().toLowerCase(), password })
-        : await loginFamily({ email: email.trim().toLowerCase(), password });
-      onAuthed(person);
+      await sendMagicLinkFamily(email.trim().toLowerCase());
+      setLinkSent(true);
     } catch (err) {
-      const msg = err.message?.replace("Firebase: ", "") || "Something went wrong.";
-      setError(msg.includes("already-in-use")
-        ? "That email is already registered — try logging in instead (same password as your rider/driver account, if you have one)."
-        : msg);
+      setError(err.message?.replace("Firebase: ", "") || "Couldn't send the sign-in link.");
     }
     setBusy(false);
   };
 
-  const handleForgotPassword = async () => {
-    if (!email.trim()) { setError("Enter your email above first."); return; }
-    try {
-      await resetPassword(email.trim().toLowerCase());
-      setResetSent(true);
-      setError("");
-    } catch (err) {
-      setError(err.message?.replace("Firebase: ", "") || "Couldn't send reset email.");
-    }
-  };
+  useEffect(() => {
+    (async () => {
+      try {
+        const googleResult = await completeGoogleSignInFamily();
+        if (googleResult) { onAuthed(googleResult); return; }
+        const magicResult = await completeMagicLinkSignInFamily();
+        if (magicResult) onAuthed(magicResult);
+      } catch (err) {
+        setError(err.message?.replace("Firebase: ", "") || "Sign-in failed.");
+      }
+    })();
+  }, []);
 
   return (
     <div className="min-h-full w-full flex flex-col justify-center px-8" style={{ background: "#111318" }}>
@@ -68,42 +71,46 @@ function FamilyAuthScreen({ onAuthed }) {
           Parental Control
         </p>
         <p className="mt-2 text-sm" style={{ color: "#7A7F8A" }}>
-          {mode === "login" ? "Log in to see rides and jobs across your whole family." : "Create your account to get started."}
+          Log in to see rides and jobs across your whole family.
         </p>
       </div>
-      <form onSubmit={submit} className="space-y-3">
-        {mode === "signup" && (
-          <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name"
-            autoComplete="name"
-            className="w-full px-4 py-3.5 rounded-xl text-base outline-none"
-            style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
-        )}
+      <button type="button" onClick={handleGoogleSignIn} disabled={busy}
+        className="w-full py-3.5 rounded-xl font-medium text-base flex items-center justify-center gap-2.5 mb-3"
+        style={{ background: "#F5F5F0", color: "#111318" }}>
+        <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84c-.21 1.13-.84 2.09-1.79 2.73v2.27h2.9c1.7-1.56 2.68-3.87 2.68-6.64z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.27c-.81.54-1.84.86-3.06.86-2.35 0-4.34-1.59-5.05-3.72H.95v2.34C2.44 15.98 5.48 18 9 18z"/><path fill="#FBBC05" d="M3.95 10.69c-.18-.54-.28-1.11-.28-1.69s.1-1.15.28-1.69V4.97H.95C.35 6.17 0 7.55 0 9s.35 2.83.95 4.03l3-2.34z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.51.46 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0 5.48 0 2.44 2.02.95 4.97l3 2.34C4.66 5.17 6.65 3.58 9 3.58z"/></svg>
+        Continue with Google
+      </button>
+      <div className="flex items-center gap-3 py-1 mb-2">
+        <div className="flex-1 h-px" style={{ background: "#2B2F3A" }} />
+        <span className="text-xs" style={{ color: "#7A7F8A" }}>or</span>
+        <div className="flex-1 h-px" style={{ background: "#2B2F3A" }} />
+      </div>
+      <div className="space-y-3">
         <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" type="email"
           autoComplete="email"
           className="w-full px-4 py-3.5 rounded-xl text-base outline-none"
           style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
-        <input value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" type="password"
-          autoComplete={mode === "signup" ? "new-password" : "current-password"}
-          className="w-full px-4 py-3.5 rounded-xl text-base outline-none"
-          style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
-        {mode === "login" && (
-          <button type="button" onClick={handleForgotPassword} className="text-xs text-right w-full" style={{ color: "#7A7F8A" }}>
-            Forgot password?
-          </button>
+        {linkSent && (
+          <p className="text-xs" style={{ color: ACCENT }}>Check your email for a sign-in link — tap it on this device to continue.</p>
         )}
-        {resetSent && <p className="text-xs" style={{ color: ACCENT }}>Check your email for a reset link.</p>}
         {error && <p className="text-sm" style={{ color: "#FF6B6B" }}>{error}</p>}
-        <button type="submit" disabled={busy}
-          className="w-full py-3.5 rounded-xl font-medium text-base mt-2 transition active:scale-[0.98]"
+        <button type="button" onClick={handleSendMagicLink} disabled={busy}
+          className="w-full py-3.5 rounded-xl font-medium text-base mt-1 transition active:scale-[0.98]"
           style={{ background: ACCENT, color: "#111318" }}>
-          {busy ? "One sec…" : mode === "login" ? "Log in" : "Create family hub account"}
+          {busy ? "One sec…" : "Encompass Rideshare"}
         </button>
-      </form>
-      <button onClick={() => { setMode(mode === "login" ? "signup" : "login"); setError(""); setResetSent(false); }}
-        className="mt-6 text-sm text-center" style={{ color: "#7A7F8A" }}>
-        {mode === "login" ? (<>New here? <span style={{ color: "#F5F5F0" }}>Create a family hub account</span></>)
-          : (<>Already have an account? <span style={{ color: "#F5F5F0" }}>Log in</span></>)}
+      </div>
+      <button type="button" onClick={() => setShowHelp((s) => !s)}
+        className="mt-6 text-sm text-center font-medium" style={{ color: ACCENT }}>
+        Trouble signing in?
       </button>
+      {showHelp && (
+        <div className="mt-3 rounded-xl p-3 text-xs leading-relaxed" style={{ background: "#1D2028", color: "#B9BBC2", border: "1px solid #2B2F3A" }}>
+          <p className="mb-1.5">• If "Continue with Google" doesn't finish, tap it again — sometimes it needs a second try.</p>
+          <p className="mb-1.5">• Use the same sign-in method (Google or email) every time — they don't share one account.</p>
+          <p>• With email, open the link on this same device to finish signing in.</p>
+        </div>
+      )}
     </div>
   );
 }
@@ -482,4 +489,3 @@ export default function FamilyApp() {
     </div>
   );
 }
-
