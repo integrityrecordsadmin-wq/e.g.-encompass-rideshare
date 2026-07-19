@@ -12,7 +12,9 @@ import { VEHICLE_TYPES } from "../../lib/vehicleTypes";
 import {
   signUpDriver, loginDriver, signOut, updateDriverProfile,
   updateRide, subscribeToRide, subscribeToNextPendingRide, subscribeToDriverRides, resetPassword,
+  setDriverOnlineStatus,
 } from "../../lib/db";
+import { registerForPush } from "../../lib/messaging";
 
 const PICKUP = { x: 78, y: 24 };
 const DROPOFF = { x: 22, y: 76 };
@@ -208,7 +210,6 @@ function SafetyToolkitScreen({ driver, onBack, onUpdateDriver }) {
   );
 }
 
-// ---------- Home / Online toggle ----------
 // ---------- Home / Online toggle ----------
 function playChime() {
   try {
@@ -771,10 +772,10 @@ export default function DriverApp() {
   };
 
   const handleDecline = async () => {
-  if (activeRide) await updateRide(activeRide.id, { status: "cancelled" });
-  setActiveRide(null);
-  setScreen("home");
-};
+    if (activeRide) await updateRide(activeRide.id, { status: "cancelled" });
+    setActiveRide(null);
+    setScreen("home");
+  };
 
   const handleComplete = async () => {
     await updateRide(activeRide.id, { status: "completed" });
