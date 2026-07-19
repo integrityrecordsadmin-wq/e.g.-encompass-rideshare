@@ -105,13 +105,15 @@ function AuthScreen({ onAuthed }) {
   };
 
 const handleGoogleSignIn = async () => {
+  alert("Button tapped — starting Google sign-in...");
   setError("");
   setBusy(true);
   try {
     const user = await loginWithGoogleRider();
+    alert("SUCCESS: " + JSON.stringify(user));
     onAuthed(user);
   } catch (err) {
-    alert("GOOGLE SIGN-IN ERROR: " + err.code + " | " + err.message);
+    alert("GOOGLE SIGN-IN ERROR: " + (err.code || "no code") + " | " + (err.message || "no message"));
     setError(err.message?.replace("Firebase: ", "") || "Google sign-in failed.");
   }
   setBusy(false);
