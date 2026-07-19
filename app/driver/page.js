@@ -1,319 +1,475 @@
-"use client";
-
-import { useState, useEffect, useRef } from "react";
+import { auth, db, storage } from "./firebase";
 import {
-  Navigation, User, Car, Clock, Check, X, Star, Power, DollarSign, MapPin, Shield, Mic, ChevronLeft, MessageCircle, BarChart3,
-} from "lucide-react";
-import CityMap from "../../components/CityMap";
-import ChatPanel from "../../components/ChatPanel";
-import { ACCENT, AMBER } from "../../lib/tokens";
-import { wazeNavigateUrl } from "../../lib/waze";
-import { VEHICLE_TYPES } from "../../lib/vehicleTypes";
+  createUserWithEmailAndPassword,
+  signInWithEmailAndPassword,
+  signOut as firebaseSignOut,
+  sendPasswordResetEmail,
+  GoogleAuthProvider,
+  signInWithRedirect,
+  getRedirectResult,
+  sendSignInLinkToEmail,
+  isSignInWithEmailLink,
+  signInWithEmailLink,
+} from "firebase/auth";
 import {
-  signUpDriver, loginDriver, signOut, updateDriverProfile,
-  updateRide, subscribeToRide, subscribeToNextPendingRide, subscribeToDriverRides, resetPassword,
-  setDriverOnlineStatus, startGoogleSignIn, completeGoogleSignInDriver, completeDriverGoogleSignup,
-} from "../../lib/db";
-import { registerForPush } from "../../lib/messaging";
+  doc,
+  getDoc,
+  getDocs,
+  setDoc,
+  updateDoc,
+  collection,
+  addDoc,
+  onSnapshot,
+  query,
+  where,
+  orderBy,
+  limit,
+  arrayUnion,
+  arrayRemove,
+  deleteField,
+  serverTimestamp,
+} from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 
-const PICKUP = { x: 78, y: 24 };
-const DROPOFF = { x: 22, y: 76 };
-const DRIVER_HOME = { x: 50, y: 50 };
-const QUICK_REPLIES_DRIVER = ["I'm here", "2 min away", "Running a bit late", "On my way"];
+// Add corporate email addresses here as you create their Firebase Auth
+// accounts. Only these emails can log into /admin.
+const ADMIN_EMAILS = [
+  "rideshare513@gmail.com",
+];
 
-function lerp(a, b, t) { return a + (b - a) * t; }
-function pointAt(path, t) {
-  const segCount = path.length - 1;
-  const scaled = t * segCount;
-  const i = Math.min(Math.floor(scaled), segCount - 1);
-  const localT = scaled - i;
-  const a = path[i], b = path[i + 1];
-  return { x: lerp(a.x, b.x, localT), y: lerp(a.y, b.y, localT) };
+const googleProvider = new GoogleAuthProvider();
+
+export async function startGoogleSignIn() {
+  await signInWithRedirect(auth, googleProvider);
 }
 
-// ---------- Auth ----------
-function DriverAuthScreen({ onAuthed }) {
-  const [mode, setMode] = useState("login");
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [carModel, setCarModel] = useState("");
-  const [plate, setPlate] = useState("");
-  const [vehicleType, setVehicleType] = useState("standard");
-  const [agreed, setAgreed] = useState(false);
-  const [error, setError] = useState("");
-  const [busy, setBusy] = useState(false);
-  const [resetSent, setResetSent] = useState(false);
-  const [googlePending, setGooglePending] = useState(null);
-  const [showHelp, setShowHelp] = useState(false);
-
-  const submit = async (e) => {
-    e.preventDefault();
-    setError("");
-    if (!email || !password || (mode === "signup" && (!name || !carModel || !plate))) {
-      setError("Fill in every field to continue.");
-      return;
-    }
-    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailPattern.test(email.trim())) {
-      setError("Enter a valid email address (e.g. name@example.com).");
-      return;
-    }
-    if (mode === "signup" && !agreed) {
-      setError("You must agree to the terms to continue.");
-      return;
-    }
-    setBusy(true);
-    try {
-      const driver = mode === "signup"
-        ? await signUpDriver({ name, email: email.trim().toLowerCase(), password, carModel, plate, vehicleType })
-        : await loginDriver({ email: email.trim().toLowerCase(), password });
-      onAuthed(driver);
-    } catch (err) {
-      setError(err.message?.replace("Firebase: ", "") || "Something went wrong.");
-    }
-    setBusy(false);
+export async function completeGoogleSignInRider() {
+  const result = await getRedirectResult(auth);
+  if (!result) return null;
+  const uid = result.user.uid;
+  const snap = await getDoc(doc(db, "riders", uid));
+  if (snap.exists()) return { uid, ...snap.data() };
+  const profile = {
+    name: result.user.displayName || "Rider",
+    email: result.user.email,
+    audioRecordingEnabled: false, rating: 5.0, ratingCount: 0,
+    termsAcceptedAt: Date.now(), createdAt: Date.now(),
   };
+  await setDoc(doc(db, "riders", uid), profile);
+  return { uid, ...profile };
+}
 
-  const handleForgotPassword = async () => {
-    if (!email.trim()) { setError("Enter your email above first."); return; }
-    try {
-      await resetPassword(email.trim().toLowerCase());
-      setResetSent(true);
-      setError("");
-    } catch (err) {
-      setError(err.message?.replace("Firebase: ", "") || "Couldn't send reset email.");
-    }
+export async function completeGoogleSignInDriver() {
+  const result = await getRedirectResult(auth);
+  if (!result) return null;
+  const uid = result.user.uid;
+  const snap = await getDoc(doc(db, "drivers", uid));
+  if (snap.exists()) return { uid, ...snap.data(), needsVehicleInfo: false };
+  return {
+    uid,
+    needsVehicleInfo: true,
+    name: result.user.displayName || "Driver",
+    email: result.user.email,
   };
+}
 
-  const handleGoogleSignIn = async () => {
-    setError("");
-    setBusy(true);
-    try {
-      await startGoogleSignIn();
-    } catch (err) {
-      setError(err.message?.replace("Firebase: ", "") || "Google sign-in failed.");
-      setBusy(false);
-    }
+export async function sendMagicLinkDriver(email) {
+  const actionCodeSettings = { url: "https://encompassrs.com/driver", handleCodeInApp: true };
+  await sendSignInLinkToEmail(auth, email, actionCodeSettings);
+  window.localStorage.setItem("emailForSignIn", email);
+}
+
+export async function sendMagicLinkRider(email) {
+  const actionCodeSettings = { url: "https://encompassrs.com/rider", handleCodeInApp: true };
+  await sendSignInLinkToEmail(auth, email, actionCodeSettings);
+  window.localStorage.setItem("emailForSignIn", email);
+}
+
+export async function completeMagicLinkSignInDriver() {
+  if (!isSignInWithEmailLink(auth, window.location.href)) return null;
+  let email = window.localStorage.getItem("emailForSignIn");
+  if (!email) email = window.prompt("Please confirm your email to complete sign-in:");
+  const result = await signInWithEmailLink(auth, email, window.location.href);
+  window.localStorage.removeItem("emailForSignIn");
+  const uid = result.user.uid;
+  const snap = await getDoc(doc(db, "drivers", uid));
+  if (snap.exists()) return { uid, ...snap.data(), needsVehicleInfo: false };
+  return { uid, needsVehicleInfo: true, name: "", email };
+}
+
+export async function completeMagicLinkSignInRider() {
+  if (!isSignInWithEmailLink(auth, window.location.href)) return null;
+  let email = window.localStorage.getItem("emailForSignIn");
+  if (!email) email = window.prompt("Please confirm your email to complete sign-in:");
+  const result = await signInWithEmailLink(auth, email, window.location.href);
+  window.localStorage.removeItem("emailForSignIn");
+  const uid = result.user.uid;
+  const snap = await getDoc(doc(db, "riders", uid));
+  if (snap.exists()) return { uid, ...snap.data() };
+  const profile = {
+    name: email.split("@")[0], email,
+    audioRecordingEnabled: false, rating: 5.0, ratingCount: 0,
+    termsAcceptedAt: Date.now(), createdAt: Date.now(),
   };
+  await setDoc(doc(db, "riders", uid), profile);
+  return { uid, ...profile };
+}
 
-  useEffect(() => {
-    (async () => {
-      try {
-        const result = await completeGoogleSignInDriver();
-        if (!result) return;
-        if (result.needsVehicleInfo) {
-          setGooglePending(result);
-          setName(result.name || "");
-        } else {
-          onAuthed(result);
-        }
-      } catch (err) {
-        setError(err.message?.replace("Firebase: ", "") || "Google sign-in failed.");
-      }
-    })();
-  }, []);
-
-  const submitGoogleVehicleInfo = async (e) => {
-    e.preventDefault();
-    setError("");
-    if (!carModel || !plate) { setError("Fill in your car model and plate to continue."); return; }
-    if (!agreed) { setError("You must agree to the terms to continue."); return; }
-    setBusy(true);
-    try {
-      const driver = await completeDriverGoogleSignup(googlePending.uid, {
-        name: googlePending.name, email: googlePending.email, carModel, plate, vehicleType,
-      });
-      onAuthed(driver);
-    } catch (err) {
-      setError(err.message?.replace("Firebase: ", "") || "Something went wrong.");
-    }
-    setBusy(false);
+export async function completeDriverGoogleSignup(uid, { name, email, carModel, plate, vehicleType }) {
+  const profile = {
+    name, email, carModel, plate, vehicleType: vehicleType || "standard", rating: 5.0, earningsToday: 0,
+    audioRecordingEnabled: false, backgroundCheckStatus: "pending",
+    documentsStatus: "not_submitted", documents: {}, pendingApproval: true,
+    termsAcceptedAt: Date.now(), createdAt: Date.now(),
   };
+  await setDoc(doc(db, "drivers", uid), profile);
+  return { uid, ...profile };
+}
 
-  if (googlePending) {
-    return (
-      <div className="min-h-full w-full flex flex-col justify-center px-8" style={{ background: "#111318" }}>
-        <div className="mb-8">
-          <div className="w-11 h-11 rounded-2xl mb-6 flex items-center justify-center" style={{ background: ACCENT }}>
-            <Car size={22} color="#111318" strokeWidth={2.5} />
-          </div>
-          <h1 className="text-3xl font-semibold tracking-tight" style={{ color: "#F5F5F0" }}>Almost there, {googlePending.name?.split(" ")[0]}</h1>
-          <p className="mt-1 text-sm" style={{ color: "#7A7F8A" }}>Just need your vehicle details to finish setting up.</p>
-        </div>
-        <form onSubmit={submitGoogleVehicleInfo} className="space-y-3">
-          <div className="flex gap-3">
-            <input value={carModel} onChange={(e) => setCarModel(e.target.value)} placeholder="Car (e.g. Silver Camry)"
-              className="w-2/3 px-4 py-3.5 rounded-xl text-base outline-none"
-              style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
-            <input value={plate} onChange={(e) => setPlate(e.target.value)} placeholder="Plate"
-              className="w-1/3 px-4 py-3.5 rounded-xl text-base outline-none"
-              style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
-          </div>
-          <div>
-            <p className="text-xs mb-2" style={{ color: "#7A7F8A" }}>What do you drive?</p>
-            <div className="grid grid-cols-2 gap-2">
-              {VEHICLE_TYPES.map((v) => {
-                const Icon = v.icon;
-                const isSelected = vehicleType === v.id;
-                return (
-                  <button key={v.id} type="button" onClick={() => setVehicleType(v.id)}
-                    className="flex items-center gap-2 p-3 rounded-xl text-left"
-                    style={{ background: isSelected ? ACCENT : "#1D2028", border: `1px solid ${isSelected ? ACCENT : "#2B2F3A"}` }}>
-                    <Icon size={16} color={isSelected ? "#111318" : "#F5F5F0"} />
-                    <span className="text-xs font-medium" style={{ color: isSelected ? "#111318" : "#F5F5F0" }}>{v.name}</span>
-                  </button>
-                );
-              })}
-            </div>
-          </div>
-          <label className="flex items-start gap-2.5 pt-1">
-            <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)}
-              className="mt-0.5 w-4 h-4 flex-shrink-0" />
-            <span className="text-xs leading-relaxed" style={{ color: "#7A7F8A" }}>
-              I agree to the <a href="/terms" className="underline" style={{ color: "#F5F5F0" }}>Terms & Conditions</a> and <a href="/policies" className="underline" style={{ color: "#F5F5F0" }}>Company Policies</a>.
-            </span>
-          </label>
-          {error && <p className="text-sm" style={{ color: "#FF6B6B" }}>{error}</p>}
-          <button type="submit" disabled={busy}
-            className="w-full py-3.5 rounded-xl font-medium text-base mt-2 transition active:scale-[0.98]"
-            style={{ background: ACCENT, color: "#111318" }}>
-            {busy ? "One sec…" : "Finish setting up"}
-          </button>
-        </form>
-      </div>
-    );
+export async function completeDriverMagicLinkSignup(uid, { name, email, carModel, plate, vehicleType }) {
+  const profile = {
+    name, email, carModel, plate, vehicleType: vehicleType || "standard", rating: 5.0, earningsToday: 0,
+    audioRecordingEnabled: false, backgroundCheckStatus: "pending",
+    documentsStatus: "not_submitted", documents: {}, pendingApproval: true,
+    termsAcceptedAt: Date.now(), createdAt: Date.now(),
+  };
+  await setDoc(doc(db, "drivers", uid), profile);
+  return { uid, ...profile };
+}
+
+export async function signUpRider({ name, email, password }) {
+  const cred = await createUserWithEmailAndPassword(auth, email, password);
+  const profile = { name, email, audioRecordingEnabled: false, rating: 5.0, ratingCount: 0, termsAcceptedAt: Date.now(), createdAt: Date.now() };
+  await setDoc(doc(db, "riders", cred.user.uid), profile);
+  return { uid: cred.user.uid, ...profile };
+}
+
+export async function signUpDriver({ name, email, password, carModel, plate, vehicleType }) {
+  const cred = await createUserWithEmailAndPassword(auth, email, password);
+  const profile = {
+    name, email, carModel, plate, vehicleType: vehicleType || "standard", rating: 5.0, earningsToday: 0,
+    audioRecordingEnabled: false, backgroundCheckStatus: "pending",
+    documentsStatus: "not_submitted", documents: {}, pendingApproval: true,
+    termsAcceptedAt: Date.now(), createdAt: Date.now(),
+  };
+  await setDoc(doc(db, "drivers", cred.user.uid), profile);
+  return { uid: cred.user.uid, ...profile };
+}
+
+export async function loginRider({ email, password }) {
+  const cred = await signInWithEmailAndPassword(auth, email, password);
+  const snap = await getDoc(doc(db, "riders", cred.user.uid));
+  if (!snap.exists()) throw new Error("No rider profile found for this account.");
+  return { uid: cred.user.uid, ...snap.data() };
+}
+
+export async function signUpFamily({ name, email, password }) {
+  const cred = await createUserWithEmailAndPassword(auth, email, password);
+  const profile = { name, email, createdAt: Date.now() };
+  await setDoc(doc(db, "familyProfiles", cred.user.uid), profile);
+  return { uid: cred.user.uid, ...profile };
+}
+
+export async function loginFamily({ email, password }) {
+  const cred = await signInWithEmailAndPassword(auth, email, password);
+  const snap = await getDoc(doc(db, "familyProfiles", cred.user.uid));
+  if (!snap.exists()) {
+    const profile = { name: cred.user.email.split("@")[0], email: cred.user.email, createdAt: Date.now() };
+    await setDoc(doc(db, "familyProfiles", cred.user.uid), profile);
+    return { uid: cred.user.uid, ...profile };
   }
-
-  return (
-    <div className="min-h-full w-full flex flex-col justify-center px-8" style={{ background: "#111318" }}>
-      <div className="mb-8">
-        <div className="w-11 h-11 rounded-2xl mb-6 flex items-center justify-center" style={{ background: ACCENT }}>
-          <Car size={22} color="#111318" strokeWidth={2.5} />
-        </div>
-        <h1 className="text-3xl font-semibold tracking-tight" style={{ color: "#F5F5F0" }}>
-          {mode === "login" ? "Welcome back, driver" : "Start driving"}
-        </h1>
-        <p className="mt-1 text-sm" style={{ color: "#7A7F8A" }}>
-          {mode === "login" ? "Log in to go online." : "Set up your driver profile."}
-        </p>
-      </div>
-      <button type="button" onClick={handleGoogleSignIn} disabled={busy}
-        className="w-full py-3.5 rounded-xl font-medium text-base flex items-center justify-center gap-2.5 mb-3"
-        style={{ background: "#F5F5F0", color: "#111318" }}>
-        <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84c-.21 1.13-.84 2.09-1.79 2.73v2.27h2.9c1.7-1.56 2.68-3.87 2.68-6.64z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.27c-.81.54-1.84.86-3.06.86-2.35 0-4.34-1.59-5.05-3.72H.95v2.34C2.44 15.98 5.48 18 9 18z"/><path fill="#FBBC05" d="M3.95 10.69c-.18-.54-.28-1.11-.28-1.69s.1-1.15.28-1.69V4.97H.95C.35 6.17 0 7.55 0 9s.35 2.83.95 4.03l3-2.34z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.51.46 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0 5.48 0 2.44 2.02.95 4.97l3 2.34C4.66 5.17 6.65 3.58 9 3.58z"/></svg>
-        Continue with Google
-      </button>
-      <div className="flex items-center gap-3 py-1 mb-2">
-        <div className="flex-1 h-px" style={{ background: "#2B2F3A" }} />
-        <span className="text-xs" style={{ color: "#7A7F8A" }}>or</span>
-        <div className="flex-1 h-px" style={{ background: "#2B2F3A" }} />
-      </div>
-      <form onSubmit={submit} className="space-y-3">
-        {mode === "signup" && (
-          <>
-            <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name"
-              className="w-full px-4 py-3.5 rounded-xl text-base outline-none"
-              style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
-            <div className="flex gap-3">
-              <input value={carModel} onChange={(e) => setCarModel(e.target.value)} placeholder="Car (e.g. Silver Camry)"
-                className="w-2/3 px-4 py-3.5 rounded-xl text-base outline-none"
-                style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
-              <input value={plate} onChange={(e) => setPlate(e.target.value)} placeholder="Plate"
-                className="w-1/3 px-4 py-3.5 rounded-xl text-base outline-none"
-                style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
-            </div>
-            <div>
-              <p className="text-xs mb-2" style={{ color: "#7A7F8A" }}>What do you drive?</p>
-              <div className="grid grid-cols-2 gap-2">
-                {VEHICLE_TYPES.map((v) => {
-                  const Icon = v.icon;
-                  const isSelected = vehicleType === v.id;
-                  return (
-                    <button key={v.id} type="button" onClick={() => setVehicleType(v.id)}
-                      className="flex items-center gap-2 p-3 rounded-xl text-left"
-                      style={{ background: isSelected ? ACCENT : "#1D2028", border: `1px solid ${isSelected ? ACCENT : "#2B2F3A"}` }}>
-                      <Icon size={16} color={isSelected ? "#111318" : "#F5F5F0"} />
-                      <span className="text-xs font-medium" style={{ color: isSelected ? "#111318" : "#F5F5F0" }}>{v.name}</span>
-                    </button>
-                  );
-                })}
-              </div>
-            </div>
-          </>
-        )}
-        <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" type="email"
-          autoComplete="email"
-          className="w-full px-4 py-3.5 rounded-xl text-base outline-none"
-          style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
-        <input value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" type="password"
-          autoComplete={mode === "signup" ? "new-password" : "current-password"}
-          className="w-full px-4 py-3.5 rounded-xl text-base outline-none"
-          style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
-        {mode === "login" && (
-          <button type="button" onClick={handleForgotPassword} className="text-xs text-right w-full" style={{ color: "#7A7F8A" }}>
-            Forgot password?
-          </button>
-        )}
-        {resetSent && (
-          <p className="text-xs" style={{ color: ACCENT }}>Check your email for a reset link.</p>
-        )}
-        {mode === "signup" && (
-          <label className="flex items-start gap-2.5 pt-1">
-            <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)}
-              className="mt-0.5 w-4 h-4 flex-shrink-0" />
-            <span className="text-xs leading-relaxed" style={{ color: "#7A7F8A" }}>
-              I agree to the <a href="/terms" className="underline" style={{ color: "#F5F5F0" }}>Terms & Conditions</a> and <a href="/policies" className="underline" style={{ color: "#F5F5F0" }}>Company Policies</a>.
-            </span>
-          </label>
-        )}
-        {error && <p className="text-sm" style={{ color: "#FF6B6B" }}>{error}</p>}
-        <button type="submit" disabled={busy}
-          className="w-full py-3.5 rounded-xl font-medium text-base mt-2 transition active:scale-[0.98]"
-          style={{ background: ACCENT, color: "#111318" }}>
-          {busy ? "One sec…" : mode === "login" ? "Log in" : "Create driver account"}
-        </button>
-      </form>
-      <button onClick={() => { setMode(mode === "login" ? "signup" : "login"); setError(""); setResetSent(false); }}
-        className="mt-6 text-sm text-center" style={{ color: "#7A7F8A" }}>
-        {mode === "login" ? (<>New driver? <span style={{ color: "#F5F5F0" }}>Create an account</span></>)
-          : (<>Already driving with us? <span style={{ color: "#F5F5F0" }}>Log in</span></>)}
-      </button>
-      <button type="button" onClick={() => setShowHelp((s) => !s)}
-        className="mt-4 text-sm text-center font-medium" style={{ color: ACCENT }}>
-        Trouble signing in?
-      </button>
-      {showHelp && (
-        <div className="mt-3 rounded-xl p-3 text-xs leading-relaxed" style={{ background: "#1D2028", color: "#B9BBC2", border: "1px solid #2B2F3A" }}>
-          <p className="mb-1.5">• If "Continue with Google" doesn't finish, tap it again — sometimes it needs a second try.</p>
-          <p className="mb-1.5">• Use the same sign-in method (Google or email) every time — they don't share one account.</p>
-          <p>• Still stuck? Log in with email and password instead.</p>
-        </div>
-      )}
-    </div>
-  );
+  return { uid: cred.user.uid, ...snap.data() };
 }
 
-// ---------- Safety Toolkit ----------
-function SafetyToolkitScreen({ driver, onBack, onUpdateDriver }) {
-  const [enabled, setEnabled] = useState(!!driver.audioRecordingEnabled);
+function generateInviteCode() {
+  const chars = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789";
+  let code = "";
+  for (let i = 0; i < 6; i++) code += chars[Math.floor(Math.random() * chars.length)];
+  return code;
+}
 
-  const toggle = async () => {
-    const next = !enabled;
-    setEnabled(next);
-    await updateDriverProfile(driver.uid, { audioRecordingEnabled: next });
-    onUpdateDriver({ ...driver, audioRecordingEnabled: next });
+export async function createFamily(person) {
+  const inviteCode = generateInviteCode();
+  const familyRef = await addDoc(collection(db, "families"), {
+    inviteCode,
+    memberUids: [person.uid],
+    roles: { [person.uid]: "guardian" },
+    createdAt: Date.now(),
+  });
+  await updateDoc(doc(db, "familyProfiles", person.uid), { familyId: familyRef.id });
+  return { id: familyRef.id, inviteCode, memberUids: [person.uid], roles: { [person.uid]: "guardian" } };
+}
+
+export async function joinFamily(person, inviteCode) {
+  const q = query(collection(db, "families"), where("inviteCode", "==", inviteCode.trim().toUpperCase()));
+  const snap = await getDocs(q);
+  if (snap.empty) throw new Error("No family found with that invite code.");
+  const familyDoc = snap.docs[0];
+  const data = familyDoc.data();
+  await updateDoc(doc(db, "families", familyDoc.id), {
+    memberUids: arrayUnion(person.uid),
+    [`roles.${person.uid}`]: "member",
+  });
+  await updateDoc(doc(db, "familyProfiles", person.uid), { familyId: familyDoc.id });
+  return {
+    id: familyDoc.id,
+    ...data,
+    memberUids: [...data.memberUids, person.uid],
+    roles: { ...data.roles, [person.uid]: "member" },
   };
+}
 
-  return (
-    <div className="w-full h-full flex flex-col" style={{ background: "#F5F5F0" }}>
-      <div className="flex items-center gap-3 p-4 pt-6">
-        <button onClick={onBack} aria-label="Back" className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: "#EDEBE2" }}>
-          <ChevronLeft size={18} color="#111318" />
-        </button>
-        <h2 className="text-base font-semibold" style={{ color: "#111318" }}>Safety Toolkit</h2>
-      </div>
-      <div className="px-4 mt-4">
+export function subscribeToFamily(familyId, onChange) {
+  return onSnapshot(doc(db, "families", familyId), (snap) => {
+    if (snap.exists()) onChange({ id: snap.id, ...snap.data() });
+  });
+}
+
+export async function leaveFamily(person, familyId) {
+  await updateDoc(doc(db, "families", familyId), {
+    memberUids: arrayRemove(person.uid),
+    [`roles.${person.uid}`]: deleteField(),
+  });
+  await updateDoc(doc(db, "familyProfiles", person.uid), { familyId: null });
+}
+
+export async function getFamilyMembers(memberUids) {
+  const profiles = await Promise.all(
+    memberUids.map(async (uid) => {
+      const snap = await getDoc(doc(db, "familyProfiles", uid));
+      return snap.exists() ? { uid, ...snap.data() } : { uid, name: "Member" };
+    })
+  );
+  return profiles;
+}
+
+export async function removeFamilyMember(familyId, targetUid) {
+  await updateDoc(doc(db, "families", familyId), {
+    memberUids: arrayRemove(targetUid),
+    [`roles.${targetUid}`]: deleteField(),
+  });
+}
+
+export async function loginDriver({ email, password }) {
+  const cred = await signInWithEmailAndPassword(auth, email, password);
+  const snap = await getDoc(doc(db, "drivers", cred.user.uid));
+  if (!snap.exists()) throw new Error("No driver profile found for this account.");
+  return { uid: cred.user.uid, ...snap.data() };
+}
+
+export async function loginAdmin({ email, password }) {
+  const cred = await signInWithEmailAndPassword(auth, email, password);
+  if (!ADMIN_EMAILS.includes(email.trim().toLowerCase())) {
+    await firebaseSignOut(auth);
+    throw new Error("This account is not authorized for admin access.");
+  }
+  return { uid: cred.user.uid, email: cred.user.email };
+}
+
+export async function signOut() {
+  await firebaseSignOut(auth);
+}
+
+export async function resetPassword(email) {
+  await sendPasswordResetEmail(auth, email);
+}
+
+export async function updateRiderProfile(uid, patch) {
+  await updateDoc(doc(db, "riders", uid), patch);
+}
+
+export async function updateDriverProfile(uid, patch) {
+  await updateDoc(doc(db, "drivers", uid), patch);
+}
+
+export async function uploadDriverDocument(uid, docType, file) {
+  const fileRef = ref(storage, `driver-documents/${uid}/${docType}-${Date.now()}`);
+  await uploadBytes(fileRef, file);
+  return await getDownloadURL(fileRef);
+}
+
+export async function submitDriverDocuments(uid, docs) {
+  await updateDoc(doc(db, "drivers", uid), {
+    documents: docs,
+    documentsStatus: "pending_review",
+    documentsSubmittedAt: Date.now(),
+  });
+}
+
+export async function reviewDriverDocuments(uid, approved, reason) {
+  await updateDoc(doc(db, "drivers", uid), {
+    documentsStatus: approved ? "approved" : "rejected",
+    documentsRejectionReason: approved ? null : (reason || "Documents did not meet requirements."),
+    documentsReviewedAt: Date.now(),
+    ...(approved ? { pendingApproval: false } : {}),
+  });
+}
+
+export async function scheduleVerificationCall(uid, { scheduledAt, zoomLink }) {
+  await updateDoc(doc(db, "drivers", uid), {
+    documentsStatus: "call_scheduled",
+    verificationCallAt: scheduledAt,
+    verificationZoomLink: zoomLink,
+  });
+}
+
+export async function createRide(ride) {
+  const docRef = await addDoc(collection(db, "rides"), {
+    ...ride,
+    vehicleType: ride.vehicleType || "standard",
+    status: "requested",
+    createdAt: Date.now(),
+    messages: [],
+  });
+  return docRef.id;
+}
+
+export async function updateRide(rideId, patch) {
+  await updateDoc(doc(db, "rides", rideId), patch);
+}
+
+export async function appendRideMessage(rideId, sender, text) {
+  await updateDoc(doc(db, "rides", rideId), {
+    messages: arrayUnion({ sender, text, ts: Date.now() }),
+  });
+}
+
+export function subscribeToRide(rideId, onChange) {
+  return onSnapshot(doc(db, "rides", rideId), (snap) => {
+    if (snap.exists()) onChange({ id: snap.id, ...snap.data() });
+  });
+}
+
+export function subscribeToNextPendingRide(vehicleType, onRide) {
+  const q = query(
+    collection(db, "rides"),
+    where("status", "==", "requested"),
+    where("vehicleType", "==", vehicleType || "standard"),
+    orderBy("createdAt", "asc"),
+    limit(1)
+  );
+  return onSnapshot(q, (snap) => {
+    if (!snap.empty) {
+      const d = snap.docs[0];
+      onRide({ id: d.id, ...d.data() });
+    }
+  });
+}
+
+export function subscribeToAllRides(onChange, max = 100) {
+  const q = query(collection(db, "rides"), orderBy("createdAt", "desc"), limit(max));
+  return onSnapshot(q, (snap) => {
+    onChange(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+  });
+}
+
+export function subscribeToDrivers(onChange) {
+  return onSnapshot(collection(db, "drivers"), (snap) => {
+    onChange(snap.docs.map((d) => ({ uid: d.id, ...d.data() })));
+  });
+}
+
+export function subscribeToRiders(onChange) {
+  return onSnapshot(collection(db, "riders"), (snap) => {
+    onChange(snap.docs.map((d) => ({ uid: d.id, ...d.data() })));
+  });
+}
+
+export function subscribeToDriverRides(driverUid, onChange, max = 300) {
+  const q = query(
+    collection(db, "rides"),
+    where("driverUid", "==", driverUid),
+    where("status", "==", "completed"),
+    orderBy("createdAt", "desc"),
+    limit(max)
+  );
+  return onSnapshot(q, (snap) => {
+    onChange(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+  });
+}
+
+export async function rateDriver(rideId, driverUid, stars) {
+  await updateDoc(doc(db, "rides", rideId), { driverRatingByRider: stars });
+  const driverRef = doc(db, "drivers", driverUid);
+  const snap = await getDoc(driverRef);
+  if (!snap.exists()) throw new Error("Driver not found.");
+  const { rating = 5.0, ratingCount = 0 } = snap.data();
+  const newCount = ratingCount + 1;
+  const newRating = (rating * ratingCount + stars) / newCount;
+  await updateDoc(driverRef, { rating: newRating, ratingCount: newCount });
+}
+
+export async function rateRider(rideId, riderUid, stars) {
+  await updateDoc(doc(db, "rides", rideId), { riderRatingByDriver: stars });
+  const riderRef = doc(db, "riders", riderUid);
+  const snap = await getDoc(riderRef);
+  if (!snap.exists()) throw new Error("Rider not found.");
+  const { rating = 5.0, ratingCount = 0 } = snap.data();
+  const newCount = ratingCount + 1;
+  const newRating = (rating * ratingCount + stars) / newCount;
+  await updateDoc(riderRef, { rating: newRating, ratingCount: newCount });
+}
+
+export async function getMemberRideActivity(uid) {
+  const asRiderQ = query(collection(db, "rides"), where("riderUid", "==", uid), orderBy("createdAt", "desc"), limit(20));
+  const asDriverQ = query(
+    collection(db, "rides"),
+    where("driverUid", "==", uid),
+    where("status", "==", "completed"),
+    orderBy("createdAt", "desc"),
+    limit(20)
+  );
+  const [riderSnap, driverSnap] = await Promise.all([getDocs(asRiderQ), getDocs(asDriverQ)]);
+  const asRider = riderSnap.docs.map((d) => ({ id: d.id, ...d.data(), memberRole: "rider" }));
+  const asDriver = driverSnap.docs.map((d) => ({ id: d.id, ...d.data(), memberRole: "driver" }));
+  return [...asRider, ...asDriver].sort((a, b) => (b.createdAt || 0) - (a.createdAt || 0));
+}
+
+export function subscribeToActiveAnnouncements(onChange) {
+  const q = query(collection(db, "announcements"), where("active", "==", true), orderBy("createdAt", "desc"), limit(5));
+  return onSnapshot(q, (snap) => {
+    onChange(snap.docs.map((d) => ({ id: d.id, ...d.data() })));
+  });
+}
+
+export async function createAnnouncement({ text, createdBy }) {
+  await addDoc(collection(db, "announcements"), { text, createdBy, active: true, createdAt: Date.now() });
+}
+
+export async function deactivateAnnouncement(id) {
+  await updateDoc(doc(db, "announcements", id), { active: false });
+}
+
+export async function setDriverOnlineStatus(uid, online, pushToken) {
+  const patch = { online };
+  if (pushToken) patch.pushToken = pushToken;
+  await updateDoc(doc(db, "drivers", uid), patch);
+}
+
+export async function getOnlineDriverTokens(vehicleType) {
+  const q = query(
+    collection(db, "drivers"),
+    where("online", "==", true),
+    where("vehicleType", "==", vehicleType || "standard")
+  );
+  const snap = await getDocs(q);
+  return snap.docs
+    .map((d) => d.data())
+    .filter((d) => d.pushToken && !d.pushDisabled)
+    .map((d) => d.pushToken);
+}
+
+export async function createFamilyRideRoom(rideId) {
+  const res = await fetch("/api/create-family-room", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ rideId }),
+  });
+  if (!res.ok) throw new Error("Could not start live video for this ride.");
+  const { url } = await res.json();
+  await updateDoc(doc(db, "rides", rideId), { familyVideoUrl: url });
+  return url;
+}
         <div className="rounded-2xl p-4" style={{ background: "#fff", border: "1px solid #E4E2D9" }}>
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: `${ACCENT}22` }}>
@@ -370,13 +526,22 @@ function DriverHomeScreen({ driver, online, setOnline, onProfile, onIncomingRide
   const handleToggleOnline = async () => {
     playChime();
     const next = !online;
-    if (next) {
-      const token = await registerForPush();
-      await setDriverOnlineStatus(driver.uid, true, token);
-    } else {
-      await setDriverOnlineStatus(driver.uid, false);
+    try {
+      if (next) {
+        let token = null;
+        try {
+          token = await registerForPush();
+        } catch (pushErr) {
+          console.error("Push registration failed, going online without it:", pushErr);
+        }
+        await setDriverOnlineStatus(driver.uid, true, token);
+      } else {
+        await setDriverOnlineStatus(driver.uid, false);
+      }
+      setOnline(next);
+    } catch (err) {
+      alert("Couldn't update your status: " + (err.message || "unknown error"));
     }
-    setOnline(next);
   };
 
   return (
@@ -951,6 +1116,25 @@ function VehicleInfoGateScreen({ driver, onComplete }) {
   );
 }
 
+// ---------- Pending admin approval ----------
+function PendingApprovalScreen({ onLogout }) {
+  return (
+    <div className="min-h-full w-full flex flex-col items-center justify-center px-8 text-center" style={{ background: "#111318" }}>
+      <div className="w-14 h-14 rounded-2xl mb-6 flex items-center justify-center" style={{ background: ACCENT }}>
+        <Shield size={26} color="#111318" strokeWidth={2.5} />
+      </div>
+      <h1 className="text-2xl font-semibold tracking-tight mb-2" style={{ color: "#F5F5F0" }}>Almost ready</h1>
+      <p className="text-sm mb-8" style={{ color: "#7A7F8A" }}>
+        Your account is being reviewed. You'll be able to go online as soon as it's approved — this is usually quick.
+      </p>
+      <button onClick={onLogout}
+        className="px-6 py-3 rounded-xl font-medium text-sm" style={{ background: "#1D2028", color: "#FF6B6B", border: "1px solid #2B2F3A" }}>
+        Log out
+      </button>
+    </div>
+  );
+}
+
 export default function DriverApp() {
   const [driver, setDriver] = useState(null);
   const [online, setOnline] = useState(false);
@@ -999,6 +1183,15 @@ export default function DriverApp() {
       <div className="w-full h-screen max-w-sm mx-auto overflow-hidden sm:rounded-[2rem] sm:h-[700px] sm:my-8 relative"
         style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.4)" }}>
         <VehicleInfoGateScreen driver={driver} onComplete={(updated) => setDriver(updated)} />
+      </div>
+    );
+  }
+
+  if (driver.pendingApproval) {
+    return (
+      <div className="w-full h-screen max-w-sm mx-auto overflow-hidden sm:rounded-[2rem] sm:h-[700px] sm:my-8 relative"
+        style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.4)" }}>
+        <PendingApprovalScreen onLogout={async () => { await signOut(); setDriver(null); }} />
       </div>
     );
   }
