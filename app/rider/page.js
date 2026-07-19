@@ -104,17 +104,18 @@ function AuthScreen({ onAuthed }) {
     }
   };
 
-  const handleGoogleSignIn = async () => {
-    setError("");
-    setBusy(true);
-    try {
-      const user = await loginWithGoogleRider();
-      onAuthed(user);
-    } catch (err) {
-      setError(err.message?.replace("Firebase: ", "") || "Google sign-in failed.");
-    }
-    setBusy(false);
-  };
+const handleGoogleSignIn = async () => {
+  setError("");
+  setBusy(true);
+  try {
+    const user = await loginWithGoogleRider();
+    onAuthed(user);
+  } catch (err) {
+    alert("GOOGLE SIGN-IN ERROR: " + err.code + " | " + err.message);
+    setError(err.message?.replace("Firebase: ", "") || "Google sign-in failed.");
+  }
+  setBusy(false);
+};
 
   const isLastStep = step === steps.length - 1;
 
