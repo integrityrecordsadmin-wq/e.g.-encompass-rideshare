@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect } from "react";
@@ -24,6 +23,10 @@ function FamilyAuthScreen({ onAuthed }) {
     setError("");
     if (!email || !password || (mode === "signup" && !name)) {
       setError("Fill in every field to continue.");
+      return;
+    }
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
+      setError("Enter a valid email address (e.g. name@example.com).");
       return;
     }
     setBusy(true);
@@ -71,13 +74,16 @@ function FamilyAuthScreen({ onAuthed }) {
       <form onSubmit={submit} className="space-y-3">
         {mode === "signup" && (
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name"
+            autoComplete="name"
             className="w-full px-4 py-3.5 rounded-xl text-base outline-none"
             style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
         )}
         <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" type="email"
+          autoComplete="email"
           className="w-full px-4 py-3.5 rounded-xl text-base outline-none"
           style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
         <input value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" type="password"
+          autoComplete={mode === "signup" ? "new-password" : "current-password"}
           className="w-full px-4 py-3.5 rounded-xl text-base outline-none"
           style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
         {mode === "login" && (
@@ -476,3 +482,4 @@ export default function FamilyApp() {
     </div>
   );
 }
+
