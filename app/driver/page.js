@@ -100,6 +100,7 @@ function DriverAuthScreen({ onAuthed }) {
     (async () => {
       try {
         const result = await completeGoogleSignInDriver();
+        alert("Redirect result: " + JSON.stringify(result));
         if (!result) return;
         if (result.needsVehicleInfo) {
           setGooglePending(result);
@@ -108,12 +109,15 @@ function DriverAuthScreen({ onAuthed }) {
           onAuthed(result);
         }
       } catch (err) {
+        alert("REDIRECT ERROR: " + err.message);
         setError(err.message?.replace("Firebase: ", "") || "Google sign-in failed.");
       }
     })();
   }, []);
 
-  const submitGoogleVehicleInfo = async (e) => {
+
+
+      const submitGoogleVehicleInfo = async (e) => {
     e.preventDefault();
     setError("");
     if (!carModel || !plate) { setError("Fill in your car model and plate to continue."); return; }
