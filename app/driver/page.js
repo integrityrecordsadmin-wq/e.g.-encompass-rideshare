@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState, useEffect, useRef } from "react";
@@ -50,6 +51,11 @@ function DriverAuthScreen({ onAuthed }) {
     setError("");
     if (!email || !password || (mode === "signup" && (!name || !carModel || !plate))) {
       setError("Fill in every field to continue.");
+      return;
+    }
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailPattern.test(email.trim())) {
+      setError("Enter a valid email address (e.g. name@example.com).");
       return;
     }
     if (mode === "signup" && !agreed) {
@@ -126,9 +132,11 @@ function DriverAuthScreen({ onAuthed }) {
           </>
         )}
         <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" type="email"
+          autoComplete="email"
           className="w-full px-4 py-3.5 rounded-xl text-base outline-none"
           style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
         <input value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" type="password"
+          autoComplete={mode === "signup" ? "new-password" : "current-password"}
           className="w-full px-4 py-3.5 rounded-xl text-base outline-none"
           style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
         {mode === "login" && (
@@ -816,3 +824,4 @@ export default function DriverApp() {
     </div>
   );
 }
+ 
