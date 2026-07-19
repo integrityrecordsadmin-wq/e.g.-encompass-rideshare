@@ -655,20 +655,21 @@ export default function RiderApp() {
     try { await createFamilyRideRoom(id); } catch (e) { /* room creation failed — trip still proceeds without video */ }
   }
   try {
-    const tokens = await getOnlineDriverTokens(vehicleType);
-    alert("Vehicle type: " + vehicleType + " | Tokens found: " + tokens.length + (tokens.length ? " | First: " + tokens[0].slice(0, 15) + "…" : ""));
-    await Promise.all(tokens.map((token) =>
-      sendPushNotification({
-        token,
-        title: "New ride request",
-        body: `${user.name} needs a ride to ${dest} — $${finalFare.toFixed(2)}`,
-        url: "/driver",
-      })
-    ));
-    alert("Send attempt finished");
-  } catch (e) {
-    alert("PUSH ERROR: " + e.message);
+      const tokens = await getOnlineDriverTokens(vehicleType);
+      alert("Vehicle type: " + vehicleType + " | Tokens found: " + tokens.length + (tokens.length ? " | First: " + tokens[0].slice(0, 15) + "…" : ""));
+      const results = await Promise.all(tokens.map((token) =>
+        sendPushNotification({
+          token,
+          title: "New ride request",
+          body: `${user.name} needs a ride to ${dest} — $${finalFare.toFixed(2)}`,
+          url: "/driver",
+        })
+      ));
+      alert("Push result: " + JSON.stringify(results));
+    } catch (e) {
+      alert("PUSH ERROR: " + e.message);
   }
+  
   setRideId(id);
   setScreen("finding");
 };
