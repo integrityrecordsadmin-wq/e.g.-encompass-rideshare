@@ -101,11 +101,13 @@ function DriverAuthScreen({ onAuthed }) {
       try {
         const result = await completeGoogleSignInDriver();
         alert("Redirect result: " + JSON.stringify(result));
-        if (!result) return;
+        if (!result) { alert("BRANCH: result was null/falsy, returning"); return; }
         if (result.needsVehicleInfo) {
+          alert("BRANCH: needsVehicleInfo true, calling setGooglePending");
           setGooglePending(result);
           setName(result.name || "");
         } else {
+          alert("BRANCH: needsVehicleInfo false, calling onAuthed directly");
           onAuthed(result);
         }
       } catch (err) {
