@@ -209,6 +209,24 @@ function SafetyToolkitScreen({ driver, onBack, onUpdateDriver }) {
 }
 
 // ---------- Home / Online toggle ----------
+// ---------- Home / Online toggle ----------
+function playChime() {
+  try {
+    const audioCtx = new (window.AudioContext || window.webkitAudioContext)();
+    const osc = audioCtx.createOscillator();
+    const gain = audioCtx.createGain();
+    osc.connect(gain);
+    gain.connect(audioCtx.destination);
+    osc.type = "sine";
+    osc.frequency.value = 660;
+    gain.gain.setValueAtTime(0.25, audioCtx.currentTime);
+    gain.gain.exponentialRampToValueAtTime(0.001, audioCtx.currentTime + 0.2);
+    osc.start();
+    osc.stop(audioCtx.currentTime + 0.2);
+    setTimeout(() => audioCtx.close(), 300);
+  } catch (e) {}
+}
+
 function DriverHomeScreen({ driver, online, setOnline, onProfile, onIncomingRide, onSafety, onEarnings }) {
   useEffect(() => {
     if (!online) return;
@@ -217,6 +235,18 @@ function DriverHomeScreen({ driver, online, setOnline, onProfile, onIncomingRide
   }, [online]);
 
   const vehicleInfo = VEHICLE_TYPES.find((v) => v.id === (driver.vehicleType || "standard"));
+
+  const handleToggleOnline = async () => {
+    playChime();
+    const next = !online;
+    if (next) {
+      const token = await registerForPush();
+      await setDriverOnlineStatus(driver.uid, true, token);
+    } else {
+      await setDriverOnlineStatus(driver.uid, false);
+    }
+    setOnline(next);
+  };
 
   return (
     <div className="relative w-full h-full">
@@ -255,7 +285,7 @@ function DriverHomeScreen({ driver, online, setOnline, onProfile, onIncomingRide
             <span className="text-xs font-medium" style={{ color: "#111318" }}>{(driver.rating || 5).toFixed(2)}</span>
           </div>
         </div>
-        <button onClick={() => setOnline(!online)}
+        <button onClick={handleToggleOnline}
           className="w-full mt-5 py-4 rounded-xl font-medium text-base flex items-center justify-center gap-2 active:scale-[0.98] transition"
           style={{ background: online ? "#111318" : ACCENT, color: online ? AMBER : "#111318" }}>
           <Power size={17} />
