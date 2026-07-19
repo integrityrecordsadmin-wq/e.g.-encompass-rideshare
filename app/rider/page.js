@@ -668,10 +668,7 @@ export default function RiderApp() {
       alert("Push result: " + JSON.stringify(results));
     } catch (e) {
       alert("PUSH ERROR: " + e.message);
-  }
-  
-  setRideId(id);
-  setScreen("finding");
+    }
 };
  
 
