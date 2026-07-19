@@ -1,4 +1,3 @@
-
 "use client";
 import { useState, useEffect, useRef } from "react";
 import {
@@ -12,8 +11,9 @@ import { fareFor, seededTrip } from "../../lib/fare";
 import { VEHICLE_TYPES } from "../../lib/vehicleTypes";
 import {
   signUpRider, loginRider, signOut, updateRiderProfile,
-  createRide, subscribeToRide, resetPassword, createFamilyRideRoom,
+  createRide, subscribeToRide, resetPassword, createFamilyRideRoom, getOnlineDriverTokens,
 } from "../../lib/db";
+import { sendPushNotification } from "../../lib/messaging";
 
 const HOME = { x: 20, y: 78 };
 const DEST = { x: 82, y: 22 };
@@ -649,6 +649,17 @@ export default function RiderApp() {
     if (isFamilyRide) {
       try { await createFamilyRideRoom(id); } catch (e) { /* room creation failed — trip still proceeds without video */ }
     }
+    try {
+      const tokens = await getOnlineDriverTokens(vehicleType);
+      await Promise.all(tokens.map((token) =>
+        sendPushNotification({
+          token,
+          title: "New ride request",
+          body: `${user.name} needs a ride to ${dest} — $${finalFare.toFixed(2)}`,
+          url: "/driver",
+        })
+      ));
+    } catch (e) { /* push failed — driver's live Firestore listener is still the primary path */ }
     setRideId(id);
     setScreen("finding");
   };
