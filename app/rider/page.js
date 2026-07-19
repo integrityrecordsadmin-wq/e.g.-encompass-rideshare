@@ -12,7 +12,7 @@ import { VEHICLE_TYPES } from "../../lib/vehicleTypes";
 import {
   signUpRider, loginRider, signOut, updateRiderProfile,
   createRide, subscribeToRide, resetPassword, createFamilyRideRoom, getOnlineDriverTokens,
-  startGoogleSignIn, completeGoogleSignInRider,
+  startGoogleSignIn, completeGoogleSignInRider, sendMagicLinkRider, completeMagicLinkSignInRider,
 } from "../../lib/db";
 import { sendPushNotification } from "../../lib/messaging";
 
@@ -46,98 +46,55 @@ function pointAt(path, t) {
 
 // ---------- Auth ----------
 function AuthScreen({ onAuthed }) {
-  const [mode, setMode] = useState("login");
-  const [step, setStep] = useState(0);
-  const [name, setName] = useState("");
   const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [name, setName] = useState("");
   const [agreed, setAgreed] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
-  const [resetSent, setResetSent] = useState(false);
-
-  const steps = mode === "signup" ? ["email", "password", "name"] : ["email", "password"];
-  const current = steps[step];
-
-  const next = () => {
-    setError("");
-    if (current === "email" && !email.trim()) { setError("Enter your email to continue."); return; }
-    if (current === "email" && !/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email.trim())) {
-      setError("Enter a valid email address (e.g. name@example.com).");
-      return;
-    }
-    if (current === "password" && !password) { setError("Enter a password to continue."); return; }
-    if (current === "name" && !name.trim()) { setError("Enter your name to continue."); return; }
-    if (current === "name" && mode === "signup" && !agreed) { setError("You must agree to the terms to continue."); return; }
-    setStep((s) => s + 1);
-  };
-
-  const back = () => {
-    setError("");
-    if (step === 0) return;
-    setStep((s) => s - 1);
-  };
-
-  const submit = async () => {
-    setError("");
-    setBusy(true);
-    try {
-      const user = mode === "signup"
-        ? await signUpRider({ name, email: email.trim().toLowerCase(), password })
-        : await loginRider({ email: email.trim().toLowerCase(), password });
-      onAuthed(user);
-    } catch (err) {
-      setError(err.message?.replace("Firebase: ", "") || "Something went wrong.");
-    }
-    setBusy(false);
-  };
-
-  const handleForgotPassword = async () => {
-    if (!email.trim()) { setError("Enter your email above first."); return; }
-    try {
-      await resetPassword(email.trim().toLowerCase());
-      setResetSent(true);
-      setError("");
-    } catch (err) {
-      setError(err.message?.replace("Firebase: ", "") || "Couldn't send reset email.");
-    }
-  };
+  const [linkSent, setLinkSent] = useState(false);
+  const [pending, setPending] = useState(null);
+  const [showHelp, setShowHelp] = useState(false);
 
   const handleGoogleSignIn = async () => {
     setError("");
     setBusy(true);
     try {
       await startGoogleSignIn();
-      // Page navigates to Google now; nothing more happens here.
     } catch (err) {
       setError(err.message?.replace("Firebase: ", "") || "Google sign-in failed.");
       setBusy(false);
     }
   };
 
+  const handleSendMagicLink = async () => {
+    setError("");
+    const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+    if (!emailPattern.test(email.trim())) {
+      setError("Enter a valid email address (e.g. name@example.com).");
+      return;
+    }
+    setBusy(true);
+    try {
+      await sendMagicLinkRider(email.trim().toLowerCase());
+      setLinkSent(true);
+    } catch (err) {
+      setError(err.message?.replace("Firebase: ", "") || "Couldn't send the sign-in link.");
+    }
+    setBusy(false);
+  };
+
   useEffect(() => {
     (async () => {
       try {
-        const user = await completeGoogleSignInRider();
-        if (user) onAuthed(user);
+        const googleResult = await completeGoogleSignInRider();
+        if (googleResult) { onAuthed(googleResult); return; }
+        const magicResult = await completeMagicLinkSignInRider();
+        if (magicResult) onAuthed(magicResult);
       } catch (err) {
-        setError(err.message?.replace("Firebase: ", "") || "Google sign-in failed.");
+        setError(err.message?.replace("Firebase: ", "") || "Sign-in failed.");
       }
     })();
   }, []);
-
-  const isLastStep = step === steps.length - 1;
-
-  const titles = {
-    email: mode === "login" ? "Welcome back" : "Let's get you a ride",
-    password: mode === "login" ? "Enter your password" : "Create a password",
-    name: "What's your name?",
-  };
-  const subtitles = {
-    email: mode === "login" ? "Log in to keep moving." : "First, your email.",
-    password: "Keep it secure — at least 6 characters.",
-    name: "So your driver knows who's riding.",
-  };
 
   return (
     <div className="min-h-full w-full flex flex-col justify-center px-8" style={{ background: "#111318" }}>
@@ -145,94 +102,46 @@ function AuthScreen({ onAuthed }) {
         <div className="w-11 h-11 rounded-2xl mb-6 flex items-center justify-center" style={{ background: ACCENT }}>
           <Navigation size={22} color="#111318" strokeWidth={2.5} />
         </div>
-        <h1 className="text-3xl font-semibold tracking-tight" style={{ color: "#F5F5F0" }}>{titles[current]}</h1>
-        <p className="mt-1 text-sm" style={{ color: "#7A7F8A" }}>{subtitles[current]}</p>
+        <h1 className="text-3xl font-semibold tracking-tight" style={{ color: "#F5F5F0" }}>Welcome</h1>
+        <p className="mt-1 text-sm" style={{ color: "#7A7F8A" }}>Sign in to keep moving.</p>
       </div>
-
-      <div className="space-y-3">
-        {current === "email" && (
-          <>
-            <button type="button" onClick={handleGoogleSignIn} disabled={busy}
-              className="w-full py-3.5 rounded-xl font-medium text-base flex items-center justify-center gap-2.5"
-              style={{ background: "#F5F5F0", color: "#111318" }}>
-              <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84c-.21 1.13-.84 2.09-1.79 2.73v2.27h2.9c1.7-1.56 2.68-3.87 2.68-6.64z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.27c-.81.54-1.84.86-3.06.86-2.35 0-4.34-1.59-5.05-3.72H.95v2.34C2.44 15.98 5.48 18 9 18z"/><path fill="#FBBC05" d="M3.95 10.69c-.18-.54-.28-1.11-.28-1.69s.1-1.15.28-1.69V4.97H.95C.35 6.17 0 7.55 0 9s.35 2.83.95 4.03l3-2.34z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.51.46 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0 5.48 0 2.44 2.02.95 4.97l3 2.34C4.66 5.17 6.65 3.58 9 3.58z"/></svg>
-              Continue with Google
-            </button>
-            <div className="flex items-center gap-3 py-1">
-              <div className="flex-1 h-px" style={{ background: "#2B2F3A" }} />
-              <span className="text-xs" style={{ color: "#7A7F8A" }}>or</span>
-              <div className="flex-1 h-px" style={{ background: "#2B2F3A" }} />
-            </div>
-          </>
-        )}
-        {current === "email" && (
-          <input autoFocus value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" type="email"
-            autoComplete="email"
-            className="w-full px-4 py-3.5 rounded-xl text-base outline-none"
-            style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
-        )}
-        {current === "password" && (
-          <>
-            <input autoFocus value={password} onChange={(e) => setPassword(e.target.value)} placeholder="Password" type="password"
-              autoComplete={mode === "signup" ? "new-password" : "current-password"}
-              className="w-full px-4 py-3.5 rounded-xl text-base outline-none"
-              style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
-            {mode === "login" && (
-              <button type="button" onClick={handleForgotPassword} className="text-xs text-right w-full" style={{ color: "#7A7F8A" }}>
-                Forgot password?
-              </button>
-            )}
-            {resetSent && (
-              <p className="text-xs" style={{ color: ACCENT }}>Check your email for a reset link.</p>
-            )}
-          </>
-        )}
-        {current === "name" && (
-          <>
-            <input autoFocus value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name"
-              autoComplete="name"
-              className="w-full px-4 py-3.5 rounded-xl text-base outline-none"
-              style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
-            {mode === "signup" && (
-              <label className="flex items-start gap-2.5 pt-1">
-                <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)}
-                  className="mt-0.5 w-4 h-4 flex-shrink-0" />
-                <span className="text-xs leading-relaxed" style={{ color: "#7A7F8A" }}>
-                  I agree to the <a href="/terms" className="underline" style={{ color: "#F5F5F0" }}>Terms & Conditions</a> and <a href="/policies" className="underline" style={{ color: "#F5F5F0" }}>Company Policies</a>.
-                </span>
-              </label>
-            )}
-          </>
-        )}
-
-        {error && <p className="text-sm" style={{ color: "#FF6B6B" }}>{error}</p>}
-
-        <button
-          onClick={isLastStep ? submit : next}
-          disabled={busy}
-          className="w-full py-3.5 rounded-xl font-medium text-base mt-2 transition active:scale-[0.98]"
-          style={{ background: ACCENT, color: "#111318" }}>
-          {busy ? "One sec…" : isLastStep ? (mode === "login" ? "Log in" : "Create account") : "Continue"}
-        </button>
-
-        {step > 0 && (
-          <button onClick={back} className="w-full text-sm text-center py-1" style={{ color: "#7A7F8A" }}>
-            Back
-          </button>
-        )}
-      </div>
-
-      <div className="flex items-center justify-center gap-1.5 mt-6">
-        {steps.map((_, i) => (
-          <div key={i} className="h-1 rounded-full transition-all" style={{ width: i === step ? 20 : 6, background: i <= step ? ACCENT : "#2B2F3A" }} />
-        ))}
-      </div>
-
-      <button onClick={() => { setMode(mode === "login" ? "signup" : "login"); setStep(0); setError(""); setResetSent(false); }}
-        className="mt-6 text-sm text-center" style={{ color: "#7A7F8A" }}>
-        {mode === "login" ? (<>New here? <span style={{ color: "#F5F5F0" }}>Create an account</span></>)
-          : (<>Already have an account? <span style={{ color: "#F5F5F0" }}>Log in</span></>)}
+      <button type="button" onClick={handleGoogleSignIn} disabled={busy}
+        className="w-full py-3.5 rounded-xl font-medium text-base flex items-center justify-center gap-2.5 mb-3"
+        style={{ background: "#F5F5F0", color: "#111318" }}>
+        <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84c-.21 1.13-.84 2.09-1.79 2.73v2.27h2.9c1.7-1.56 2.68-3.87 2.68-6.64z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.27c-.81.54-1.84.86-3.06.86-2.35 0-4.34-1.59-5.05-3.72H.95v2.34C2.44 15.98 5.48 18 9 18z"/><path fill="#FBBC05" d="M3.95 10.69c-.18-.54-.28-1.11-.28-1.69s.1-1.15.28-1.69V4.97H.95C.35 6.17 0 7.55 0 9s.35 2.83.95 4.03l3-2.34z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.51.46 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0 5.48 0 2.44 2.02.95 4.97l3 2.34C4.66 5.17 6.65 3.58 9 3.58z"/></svg>
+        Continue with Google
       </button>
+      <div className="flex items-center gap-3 py-1 mb-2">
+        <div className="flex-1 h-px" style={{ background: "#2B2F3A" }} />
+        <span className="text-xs" style={{ color: "#7A7F8A" }}>or</span>
+        <div className="flex-1 h-px" style={{ background: "#2B2F3A" }} />
+      </div>
+      <div className="space-y-3">
+        <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" type="email"
+          autoComplete="email"
+          className="w-full px-4 py-3.5 rounded-xl text-base outline-none"
+          style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
+        {linkSent && (
+          <p className="text-xs" style={{ color: ACCENT }}>Check your email for a sign-in link — tap it on this device to continue.</p>
+        )}
+        {error && <p className="text-sm" style={{ color: "#FF6B6B" }}>{error}</p>}
+        <button type="button" onClick={handleSendMagicLink} disabled={busy}
+          className="w-full py-3.5 rounded-xl font-medium text-base mt-1 transition active:scale-[0.98]"
+          style={{ background: ACCENT, color: "#111318" }}>
+          {busy ? "One sec…" : "Encompass Rideshare"}
+        </button>
+      </div>
+      <button type="button" onClick={() => setShowHelp((s) => !s)}
+        className="mt-6 text-sm text-center font-medium" style={{ color: ACCENT }}>
+        Trouble signing in?
+      </button>
+      {showHelp && (
+        <div className="mt-3 rounded-xl p-3 text-xs leading-relaxed" style={{ background: "#1D2028", color: "#B9BBC2", border: "1px solid #2B2F3A" }}>
+          <p className="mb-1.5">• If "Continue with Google" doesn't finish, tap it again — sometimes it needs a second try.</p>
+          <p className="mb-1.5">• Use the same sign-in method (Google or email) every time — they don't share one account.</p>
+          <p>• With email, open the link on this same device to finish signing in.</p>
+        </div>
+      )}
     </div>
   );
 }
