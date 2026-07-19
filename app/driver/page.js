@@ -246,16 +246,22 @@ function DriverHomeScreen({ driver, online, setOnline, onProfile, onIncomingRide
   const vehicleInfo = VEHICLE_TYPES.find((v) => v.id === (driver.vehicleType || "standard"));
 
   const handleToggleOnline = async () => {
-    playChime();
-    const next = !online;
+  playChime();
+  const next = !online;
+  try {
     if (next) {
       const token = await registerForPush();
+      alert("Push token: " + (token ? token.slice(0, 20) + "…" : "NONE — registration failed"));
       await setDriverOnlineStatus(driver.uid, true, token);
+      alert("Firestore write succeeded");
     } else {
       await setDriverOnlineStatus(driver.uid, false);
     }
     setOnline(next);
-  };
+  } catch (err) {
+    alert("ERROR: " + err.message);
+  }
+};
 
   return (
     <div className="relative w-full h-full">
