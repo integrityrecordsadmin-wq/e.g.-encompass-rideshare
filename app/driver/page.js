@@ -1,4 +1,3 @@
-
 "use client";
 
 import { useState, useEffect, useRef } from "react";
@@ -13,7 +12,7 @@ import { VEHICLE_TYPES } from "../../lib/vehicleTypes";
 import {
   signUpDriver, loginDriver, signOut, updateDriverProfile,
   updateRide, subscribeToRide, subscribeToNextPendingRide, subscribeToDriverRides, resetPassword,
-  setDriverOnlineStatus,
+  setDriverOnlineStatus, startGoogleSignIn, completeGoogleSignInDriver, completeDriverGoogleSignup,
 } from "../../lib/db";
 import { registerForPush } from "../../lib/messaging";
 
@@ -45,6 +44,7 @@ function DriverAuthScreen({ onAuthed }) {
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [resetSent, setResetSent] = useState(false);
+  const [googlePending, setGooglePending] = useState(null);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -85,6 +85,105 @@ function DriverAuthScreen({ onAuthed }) {
     }
   };
 
+  const handleGoogleSignIn = async () => {
+    setError("");
+    setBusy(true);
+    try {
+      await startGoogleSignIn();
+    } catch (err) {
+      setError(err.message?.replace("Firebase: ", "") || "Google sign-in failed.");
+      setBusy(false);
+    }
+  };
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const result = await completeGoogleSignInDriver();
+        if (!result) return;
+        if (result.needsVehicleInfo) {
+          setGooglePending(result);
+          setName(result.name || "");
+        } else {
+          onAuthed(result);
+        }
+      } catch (err) {
+        setError(err.message?.replace("Firebase: ", "") || "Google sign-in failed.");
+      }
+    })();
+  }, []);
+
+  const submitGoogleVehicleInfo = async (e) => {
+    e.preventDefault();
+    setError("");
+    if (!carModel || !plate) { setError("Fill in your car model and plate to continue."); return; }
+    if (!agreed) { setError("You must agree to the terms to continue."); return; }
+    setBusy(true);
+    try {
+      const driver = await completeDriverGoogleSignup(googlePending.uid, {
+        name: googlePending.name, email: googlePending.email, carModel, plate, vehicleType,
+      });
+      onAuthed(driver);
+    } catch (err) {
+      setError(err.message?.replace("Firebase: ", "") || "Something went wrong.");
+    }
+    setBusy(false);
+  };
+
+  if (googlePending) {
+    return (
+      <div className="min-h-full w-full flex flex-col justify-center px-8" style={{ background: "#111318" }}>
+        <div className="mb-8">
+          <div className="w-11 h-11 rounded-2xl mb-6 flex items-center justify-center" style={{ background: ACCENT }}>
+            <Car size={22} color="#111318" strokeWidth={2.5} />
+          </div>
+          <h1 className="text-3xl font-semibold tracking-tight" style={{ color: "#F5F5F0" }}>Almost there, {googlePending.name?.split(" ")[0]}</h1>
+          <p className="mt-1 text-sm" style={{ color: "#7A7F8A" }}>Just need your vehicle details to finish setting up.</p>
+        </div>
+        <form onSubmit={submitGoogleVehicleInfo} className="space-y-3">
+          <div className="flex gap-3">
+            <input value={carModel} onChange={(e) => setCarModel(e.target.value)} placeholder="Car (e.g. Silver Camry)"
+              className="w-2/3 px-4 py-3.5 rounded-xl text-base outline-none"
+              style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
+            <input value={plate} onChange={(e) => setPlate(e.target.value)} placeholder="Plate"
+              className="w-1/3 px-4 py-3.5 rounded-xl text-base outline-none"
+              style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
+          </div>
+          <div>
+            <p className="text-xs mb-2" style={{ color: "#7A7F8A" }}>What do you drive?</p>
+            <div className="grid grid-cols-2 gap-2">
+              {VEHICLE_TYPES.map((v) => {
+                const Icon = v.icon;
+                const isSelected = vehicleType === v.id;
+                return (
+                  <button key={v.id} type="button" onClick={() => setVehicleType(v.id)}
+                    className="flex items-center gap-2 p-3 rounded-xl text-left"
+                    style={{ background: isSelected ? ACCENT : "#1D2028", border: `1px solid ${isSelected ? ACCENT : "#2B2F3A"}` }}>
+                    <Icon size={16} color={isSelected ? "#111318" : "#F5F5F0"} />
+                    <span className="text-xs font-medium" style={{ color: isSelected ? "#111318" : "#F5F5F0" }}>{v.name}</span>
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+          <label className="flex items-start gap-2.5 pt-1">
+            <input type="checkbox" checked={agreed} onChange={(e) => setAgreed(e.target.checked)}
+              className="mt-0.5 w-4 h-4 flex-shrink-0" />
+            <span className="text-xs leading-relaxed" style={{ color: "#7A7F8A" }}>
+              I agree to the <a href="/terms" className="underline" style={{ color: "#F5F5F0" }}>Terms & Conditions</a> and <a href="/policies" className="underline" style={{ color: "#F5F5F0" }}>Company Policies</a>.
+            </span>
+          </label>
+          {error && <p className="text-sm" style={{ color: "#FF6B6B" }}>{error}</p>}
+          <button type="submit" disabled={busy}
+            className="w-full py-3.5 rounded-xl font-medium text-base mt-2 transition active:scale-[0.98]"
+            style={{ background: ACCENT, color: "#111318" }}>
+            {busy ? "One sec…" : "Finish setting up"}
+          </button>
+        </form>
+      </div>
+    );
+  }
+
   return (
     <div className="min-h-full w-full flex flex-col justify-center px-8" style={{ background: "#111318" }}>
       <div className="mb-8">
@@ -97,6 +196,17 @@ function DriverAuthScreen({ onAuthed }) {
         <p className="mt-1 text-sm" style={{ color: "#7A7F8A" }}>
           {mode === "login" ? "Log in to go online." : "Set up your driver profile."}
         </p>
+      </div>
+      <button type="button" onClick={handleGoogleSignIn} disabled={busy}
+        className="w-full py-3.5 rounded-xl font-medium text-base flex items-center justify-center gap-2.5 mb-3"
+        style={{ background: "#F5F5F0", color: "#111318" }}>
+        <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84c-.21 1.13-.84 2.09-1.79 2.73v2.27h2.9c1.7-1.56 2.68-3.87 2.68-6.64z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.27c-.81.54-1.84.86-3.06.86-2.35 0-4.34-1.59-5.05-3.72H.95v2.34C2.44 15.98 5.48 18 9 18z"/><path fill="#FBBC05" d="M3.95 10.69c-.18-.54-.28-1.11-.28-1.69s.1-1.15.28-1.69V4.97H.95C.35 6.17 0 7.55 0 9s.35 2.83.95 4.03l3-2.34z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.51.46 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0 5.48 0 2.44 2.02.95 4.97l3 2.34C4.66 5.17 6.65 3.58 9 3.58z"/></svg>
+        Continue with Google
+      </button>
+      <div className="flex items-center gap-3 py-1 mb-2">
+        <div className="flex-1 h-px" style={{ background: "#2B2F3A" }} />
+        <span className="text-xs" style={{ color: "#7A7F8A" }}>or</span>
+        <div className="flex-1 h-px" style={{ background: "#2B2F3A" }} />
       </div>
       <form onSubmit={submit} className="space-y-3">
         {mode === "signup" && (
@@ -246,22 +356,16 @@ function DriverHomeScreen({ driver, online, setOnline, onProfile, onIncomingRide
   const vehicleInfo = VEHICLE_TYPES.find((v) => v.id === (driver.vehicleType || "standard"));
 
   const handleToggleOnline = async () => {
-  playChime();
-  const next = !online;
-  try {
+    playChime();
+    const next = !online;
     if (next) {
       const token = await registerForPush();
-      alert("Push token: " + (token ? token.slice(0, 20) + "…" : "NONE — registration failed"));
       await setDriverOnlineStatus(driver.uid, true, token);
-      alert("Firestore write succeeded");
     } else {
       await setDriverOnlineStatus(driver.uid, false);
     }
     setOnline(next);
-  } catch (err) {
-    alert("ERROR: " + err.message);
-  }
-};
+  };
 
   return (
     <div className="relative w-full h-full">
@@ -830,4 +934,3 @@ export default function DriverApp() {
     </div>
   );
 }
- 
