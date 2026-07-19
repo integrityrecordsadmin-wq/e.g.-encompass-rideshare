@@ -642,32 +642,37 @@ export default function RiderApp() {
   const [finalDriverName, setFinalDriverName] = useState("");
 
   const handleConfirmDestination = async (dest, vehicleType, finalFare, isFamilyRide) => {
-    setDestination(dest);
-    const trip = seededTrip(dest);
-    const id = await createRide({
-      riderName: user.name, riderUid: user.uid,
-      destination: dest, fare: finalFare, miles: trip.miles, minutes: trip.minutes,
-      vehicleType,
-      isFamilyRide: !!isFamilyRide,
-      riderRecording: !!user.audioRecordingEnabled,
-    });
-    if (isFamilyRide) {
-      try { await createFamilyRideRoom(id); } catch (e) { /* room creation failed — trip still proceeds without video */ }
-    }
-    try {
-      const tokens = await getOnlineDriverTokens(vehicleType);
-      await Promise.all(tokens.map((token) =>
-        sendPushNotification({
-          token,
-          title: "New ride request",
-          body: `${user.name} needs a ride to ${dest} — $${finalFare.toFixed(2)}`,
-          url: "/driver",
-        })
-      ));
-    } catch (e) { /* push failed — driver's live Firestore listener is still the primary path */ }
-    setRideId(id);
-    setScreen("finding");
-  };
+  setDestination(dest);
+  const trip = seededTrip(dest);
+  const id = await createRide({
+    riderName: user.name, riderUid: user.uid,
+    destination: dest, fare: finalFare, miles: trip.miles, minutes: trip.minutes,
+    vehicleType,
+    isFamilyRide: !!isFamilyRide,
+    riderRecording: !!user.audioRecordingEnabled,
+  });
+  if (isFamilyRide) {
+    try { await createFamilyRideRoom(id); } catch (e) { /* room creation failed — trip still proceeds without video */ }
+  }
+  try {
+    const tokens = await getOnlineDriverTokens(vehicleType);
+    alert("Vehicle type: " + vehicleType + " | Tokens found: " + tokens.length + (tokens.length ? " | First: " + tokens[0].slice(0, 15) + "…" : ""));
+    await Promise.all(tokens.map((token) =>
+      sendPushNotification({
+        token,
+        title: "New ride request",
+        body: `${user.name} needs a ride to ${dest} — $${finalFare.toFixed(2)}`,
+        url: "/driver",
+      })
+    ));
+    alert("Send attempt finished");
+  } catch (e) {
+    alert("PUSH ERROR: " + e.message);
+  }
+  setRideId(id);
+  setScreen("finding");
+};
+ 
 
   const handleAccepted = (ride) => { setFinalDriverName(ride.driverName || ""); setScreen("tracking"); };
   const handleComplete = (ride) => { setFinalDriverName(ride.driverName || ""); setScreen("complete"); };
