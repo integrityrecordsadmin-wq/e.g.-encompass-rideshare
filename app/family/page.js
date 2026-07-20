@@ -3,7 +3,7 @@ import LiveTrackingMap from "./LiveTrackingMap";
 import { useState, useEffect } from "react";
 import { Users, Heart, Copy, LogOut, Car, DollarSign, AlertTriangle, Megaphone, Radio, Info, Briefcase, Truck, Video } from "lucide-react";
 import { ACCENT, AMBER } from "../../lib/tokens";
-import {
+import { 
   signUpFamily, loginFamily, resetPassword,
   createFamily, joinFamily, subscribeToFamily, leaveFamily, getFamilyMembers, removeFamilyMember,
   getMemberRideActivity, subscribeToActiveAnnouncements,
@@ -548,11 +548,7 @@ function FamilyDashboard({ person, family, onLogout }) {
           <span className="w-6 h-6 rounded-full bg-white block" />
         </button>
       </div>
-      {liveTrackingOn && (
-        <div className="mx-6 mb-4 rounded-xl p-3 text-center" style={{ color: "#7A7F8A", border: "1px dashed #2B2F3A" }}>
-          <p className="text-xs">Live location tracking is coming soon — we'll show a real-time map here once it's ready.</p>
-        </div>
-      )}
+      {liveTrackingOn && <LiveTrackingMap memberUids={family.memberUids} />}
 
       <div className="mx-6 mb-2 rounded-2xl p-4 flex items-center justify-between"
         style={{ background: "#181B22", border: "1px solid #2B2F3A" }}>
