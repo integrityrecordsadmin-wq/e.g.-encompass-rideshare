@@ -1,4 +1,5 @@
 "use client";
+import ShareQRCode from "../../components/ShareQRCode";
 import LiveTrackingMap from "./LiveTrackingMap";
 import { useState, useEffect } from "react";
 import { Users, Heart, Copy, LogOut, Car, DollarSign, AlertTriangle, Megaphone, Radio, Info, Briefcase, Truck, Video } from "lucide-react";
@@ -668,18 +669,20 @@ function FamilyDashboard({ person, family, onLogout }) {
           <p className="text-xs uppercase tracking-wide" style={{ color: "#7A7F8A" }}>Recent activity</p>
         </div>
         <ActivityFeed members={members} />
-      </div>
+        </div>
 
-      <div className="px-6 py-5">
-        <button onClick={handleLeave}
-          className="w-full py-3 rounded-xl font-medium text-sm flex items-center justify-center gap-2"
-          style={{ background: "#1D2028", color: "#FF6B6B", border: "1px solid #2B2F3A" }}>
-          <LogOut size={15} /> Leave family
-        </button>
+        <ShareQRCode url="https://encompassrs.com/family" label="Share Family Hub" />
+
+        <div className="px-6 py-5">
+          <button onClick={handleLeave}
+            className="w-full py-3 rounded-xl font-medium text-sm flex items-center justify-center gap-2"
+            style={{ background: "#1D2028", color: "#FF6B6B", border: "1px solid #2B2F3A" }}>
+            <LogOut size={15} /> Leave family
+          </button>
+        </div>
       </div>
-    </div>
-  );
-}
+    );
+  }
 
 export default function FamilyApp() {
   const [person, setPerson] = useState(null);
