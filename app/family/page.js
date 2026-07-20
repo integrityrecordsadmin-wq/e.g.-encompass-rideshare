@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Users, Heart, Copy, LogOut, Car, DollarSign, AlertTriangle, Megaphone } from "lucide-react";
+import { Users, Heart, Copy, LogOut, Car, DollarSign, AlertTriangle, Megaphone, Radio, Info } from "lucide-react";
 import { ACCENT, AMBER } from "../../lib/tokens";
 import {
   signUpFamily, loginFamily, resetPassword,
@@ -360,6 +360,8 @@ function AlertBanners() {
 function FamilyDashboard({ person, family, onLogout }) {
   const [members, setMembers] = useState([]);
   const [copied, setCopied] = useState(false);
+  const [liveTrackingOn, setLiveTrackingOn] = useState(false);
+  const [showAbout, setShowAbout] = useState(false);
 
   useEffect(() => {
     if (family?.memberUids?.length) getFamilyMembers(family.memberUids).then(setMembers);
@@ -389,6 +391,80 @@ function FamilyDashboard({ person, family, onLogout }) {
         <h1 className="text-2xl font-semibold" style={{ color: "#F5F5F0" }}>Family Hub</h1>
         <p className="text-sm font-medium mt-0.5" style={{ color: ACCENT }}>Parental Control</p>
       </div>
+
+      <div className="mx-6 mb-2 rounded-2xl p-4 flex items-center justify-between"
+        style={{ background: "#181B22", border: "1px solid #2B2F3A" }}>
+        <div className="flex items-center gap-2.5">
+          <Radio size={16} color={liveTrackingOn ? "#4ADE80" : "#7A7F8A"} />
+          <div>
+            <p className="text-sm font-medium" style={{ color: "#F5F5F0" }}>Live tracking</p>
+            <p className="text-xs" style={{ color: "#7A7F8A" }}>See a family member's ride in real time</p>
+          </div>
+        </div>
+        <button onClick={() => setLiveTrackingOn((v) => !v)}
+          className="w-12 h-7 rounded-full flex items-center px-0.5 transition flex-shrink-0"
+          style={{ background: liveTrackingOn ? ACCENT : "#2B2F3A", justifyContent: liveTrackingOn ? "flex-end" : "flex-start" }}>
+          <span className="w-6 h-6 rounded-full bg-white block" />
+        </button>
+      </div>
+      {liveTrackingOn && (
+        <div className="mx-6 mb-4 rounded-xl p-3 text-center" style={{ color: "#7A7F8A", border: "1px dashed #2B2F3A" }}>
+          <p className="text-xs">Live location tracking is coming soon — we'll show a real-time map here once it's ready.</p>
+        </div>
+      )}
+
+      <div className="mx-6 mb-2 rounded-2xl p-4 flex items-center justify-between"
+        style={{ background: "#181B22", border: "1px solid #2B2F3A" }}>
+        <div className="flex items-center gap-2.5">
+          <Info size={16} color={showAbout ? ACCENT : "#7A7F8A"} />
+          <div>
+            <p className="text-sm font-medium" style={{ color: "#F5F5F0" }}>About</p>
+            <p className="text-xs" style={{ color: "#7A7F8A" }}>Our mission and how Family Hub works</p>
+          </div>
+        </div>
+        <button onClick={() => setShowAbout((v) => !v)}
+          className="w-12 h-7 rounded-full flex items-center px-0.5 transition flex-shrink-0"
+          style={{ background: showAbout ? ACCENT : "#2B2F3A", justifyContent: showAbout ? "flex-end" : "flex-start" }}>
+          <span className="w-6 h-6 rounded-full bg-white block" />
+        </button>
+      </div>
+      {showAbout && (
+        <div className="mx-6 mb-4 rounded-xl p-4 space-y-4" style={{ background: "#181B22", border: "1px solid #2B2F3A" }}>
+          <div>
+            <p className="text-sm font-semibold mb-1" style={{ color: "#F5F5F0" }}>Our mission</p>
+            <p className="text-xs leading-relaxed" style={{ color: "#B9BBC2" }}>
+              [Add your mission statement here — a sentence or two about why Encompass Rideshare exists and what you're building toward.]
+            </p>
+          </div>
+          <div>
+            <p className="text-sm font-semibold mb-1" style={{ color: "#F5F5F0" }}>Contact</p>
+            <p className="text-xs leading-relaxed" style={{ color: "#B9BBC2" }}>
+              [Add a support email or phone number here.]
+            </p>
+          </div>
+          <div>
+            <p className="text-sm font-semibold mb-2" style={{ color: "#F5F5F0" }}>How Family Hub works</p>
+            <div className="space-y-2.5">
+              <div>
+                <p className="text-xs font-medium" style={{ color: "#F5F5F0" }}>Inviting family members</p>
+                <p className="text-xs leading-relaxed" style={{ color: "#B9BBC2" }}>Guardians can share the invite code above with family members so they can join and be seen on this dashboard.</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium" style={{ color: "#F5F5F0" }}>Activity feed</p>
+                <p className="text-xs leading-relaxed" style={{ color: "#B9BBC2" }}>Shows each family member's ride history, grouped by day, so guardians can see where rides happened.</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium" style={{ color: "#F5F5F0" }}>Alerts</p>
+                <p className="text-xs leading-relaxed" style={{ color: "#B9BBC2" }}>Amber alerts pull from the official emergency feed for your area. Special messages are posted by Encompass admin when needed.</p>
+              </div>
+              <div>
+                <p className="text-xs font-medium" style={{ color: "#F5F5F0" }}>Live tracking</p>
+                <p className="text-xs leading-relaxed" style={{ color: "#B9BBC2" }}>Will show a family member's ride in real time once map integration is turned on.</p>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
 
       <AlertBanners />
 
