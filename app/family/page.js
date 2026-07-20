@@ -1,4 +1,5 @@
 "use client";
+export const dynamic = "force-dynamic";
 import ShareQRCode from "../../components/ShareQRCode";
 import LiveTrackingMap from "./LiveTrackingMap";
 import { useState, useEffect } from "react";
