@@ -18,7 +18,7 @@ function FamilyAuthScreen({ onAuthed }) {
   const [busy, setBusy] = useState(false);
   const [linkSent, setLinkSent] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
-
+export const dynamic = "force-dynamic";
   const handleGoogleSignIn = async () => {
     setError("");
     setBusy(true);
