@@ -7,7 +7,7 @@ import {
   scheduleVerificationCall, reviewDriverDocuments, updateDriverProfile, loginAdmin,
   subscribeToActiveAnnouncements, createAnnouncement, deactivateAnnouncement,
 } from "../../lib/db";
-
+export const dynamic = "force-dynamic";
 const STATUS_META = {
   requested: { label: "Requested", color: MUTED },
   accepted: { label: "Accepted", color: ACCENT },
