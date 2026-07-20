@@ -20,6 +20,7 @@ import {
   updateRide, subscribeToRide, subscribeToNextPendingRide, subscribeToDriverRides, resetPassword,
   setDriverOnlineStatus, startGoogleSignIn, completeGoogleSignInDriver, completeDriverGoogleSignup,
   sendMagicLinkDriver, completeMagicLinkSignInDriver, completeDriverMagicLinkSignup,
+updateDriverLocation,
 } from "../../lib/db";
 import { registerForPush } from "../../lib/messaging";
 
