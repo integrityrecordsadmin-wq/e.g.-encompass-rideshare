@@ -1,5 +1,11 @@
 "use client";
-
+import {
+  signUpDriver, loginDriver, signOut, updateDriverProfile,
+  updateRide, subscribeToRide, subscribeToNextPendingRide, subscribeToDriverRides, resetPassword,
+  setDriverOnlineStatus, startGoogleSignIn, completeGoogleSignInDriver, completeDriverGoogleSignup,
+  sendMagicLinkDriver, completeMagicLinkSignInDriver, completeDriverMagicLinkSignup,
+  updateDriverLocation,
+} from "../../lib/db";
 import { useState, useEffect, useRef } from "react";
 import {
   Navigation, User, Car, Clock, Check, X, Star, Power, DollarSign, MapPin, Shield, Mic, ChevronLeft, MessageCircle, BarChart3,
@@ -72,8 +78,26 @@ function DriverAuthScreen({ onAuthed }) {
       setError(err.message?.replace("Firebase: ", "") || "Couldn't send the sign-in link.");
     }
     setBusy(false);
-  };
-
+  };useEffect(() => {
+    const unsub = subscribeToRide(ride.id, (r) => setLiveMsgCount((r.messages || []).length));
+    return unsub;
+  }, [ride.id]);
+useEffect(() => {
+    if (phase !== "toDropoff" && phase !== "arrivedDropoff") return;
+    if (!navigator.geolocation) return;
+    let lastSent = 0;
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const now = Date.now();
+        if (now - lastSent < 5000) return;
+        lastSent = now;
+        updateDriverLocation(ride.id, pos.coords.latitude, pos.coords.longitude);
+      },
+      (err) => console.error("Location error:", err),
+      { enableHighAccuracy: true, maximumAge: 5000 }
+    );
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [phase, ride.id]);
   useEffect(() => {
     (async () => {
       try {
