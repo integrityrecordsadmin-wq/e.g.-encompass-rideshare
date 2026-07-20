@@ -1,13 +1,14 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { Users, Heart, Copy, LogOut, Car, DollarSign, AlertTriangle, Megaphone, Radio, Info } from "lucide-react";
+import { Users, Heart, Copy, LogOut, Car, DollarSign, AlertTriangle, Megaphone, Radio, Info, Briefcase, Truck, Video } from "lucide-react";
 import { ACCENT, AMBER } from "../../lib/tokens";
 import {
   signUpFamily, loginFamily, resetPassword,
   createFamily, joinFamily, subscribeToFamily, leaveFamily, getFamilyMembers, removeFamilyMember,
   getMemberRideActivity, subscribeToActiveAnnouncements,
   startGoogleSignIn, completeGoogleSignInFamily, sendMagicLinkFamily, completeMagicLinkSignInFamily,
+  createJobPost, subscribeToOpenJobPosts, claimJobPost,
 } from "../../lib/db";
 
 function FamilyAuthScreen({ onAuthed }) {
@@ -306,6 +307,25 @@ function ActivityFeed({ members }) {
   );
 }
 
+function ScrollingTicker() {
+  const text = "Encompass Rideshare — live AMBER Alerts, local news, and weather coming soon to this space — Encompass Rideshare — ";
+  return (
+    <div className="mx-6 mb-4 rounded-xl overflow-hidden" style={{ background: "#181B22", border: "1px solid #2B2F3A" }}>
+      <div className="py-2 px-3 whitespace-nowrap overflow-hidden relative">
+        <div className="inline-block" style={{ animation: "encompass-ticker 18s linear infinite" }}>
+          <span className="text-xs font-medium tracking-wide" style={{ color: ACCENT }}>{text}{text}</span>
+        </div>
+      </div>
+      <style>{`
+        @keyframes encompass-ticker {
+          0% { transform: translateX(0); }
+          100% { transform: translateX(-50%); }
+        }
+      `}</style>
+    </div>
+  );
+}
+
 function AlertBanners() {
   const [amberAlerts, setAmberAlerts] = useState([]);
   const [announcements, setAnnouncements] = useState([]);
@@ -353,6 +373,127 @@ function AlertBanners() {
           <p className="text-sm" style={{ color: "#F5F5F0" }}>{m.text}</p>
         </div>
       ))}
+    </div>
+  );
+}
+
+function JobBoard({ person }) {
+  const [jobs, setJobs] = useState([]);
+  const [showForm, setShowForm] = useState(false);
+  const [pickup, setPickup] = useState("");
+  const [dropoff, setDropoff] = useState("");
+  const [price, setPrice] = useState("");
+  const [vehicleType, setVehicleType] = useState("truck");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  useEffect(() => {
+    const unsub = subscribeToOpenJobPosts(setJobs);
+    return () => unsub();
+  }, []);
+
+  const submitJob = async (e) => {
+    e.preventDefault();
+    setError("");
+    if (!pickup.trim() || !dropoff.trim() || !price) {
+      setError("Fill in pickup, dropoff, and price.");
+      return;
+    }
+    setBusy(true);
+    try {
+      await createJobPost({
+        postedByName: person.name, postedByUid: person.uid,
+        pickup: pickup.trim(), dropoff: dropoff.trim(),
+        price: parseFloat(price), vehicleType,
+      });
+      setPickup(""); setDropoff(""); setPrice(""); setShowForm(false);
+    } catch (err) {
+      setError(err.message || "Couldn't post the job.");
+    }
+    setBusy(false);
+  };
+
+  const claim = async (jobId) => {
+    try {
+      await claimJobPost(jobId, person.name, person.uid);
+    } catch (err) {
+      alert(err.message || "Couldn't claim this job.");
+    }
+  };
+
+  return (
+    <div className="rounded-2xl p-4" style={{ background: "#181B22", border: "1px solid #2B2F3A" }}>
+      <div className="flex items-center justify-between mb-3">
+        <div className="flex items-center gap-2">
+          <Briefcase size={16} color={ACCENT} />
+          <p className="text-sm font-semibold" style={{ color: "#F5F5F0" }}>Job board</p>
+        </div>
+        <button onClick={() => setShowForm((s) => !s)}
+          className="text-xs font-medium px-2.5 py-1 rounded-lg" style={{ background: ACCENT, color: "#111318" }}>
+          {showForm ? "Cancel" : "Post a job"}
+        </button>
+      </div>
+
+      {showForm && (
+        <form onSubmit={submitJob} className="space-y-2 mb-3">
+          <input value={pickup} onChange={(e) => setPickup(e.target.value)} placeholder="Pickup location"
+            className="w-full px-3 py-2.5 rounded-lg text-sm outline-none"
+            style={{ background: "#111318", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
+          <input value={dropoff} onChange={(e) => setDropoff(e.target.value)} placeholder="Dropoff location"
+            className="w-full px-3 py-2.5 rounded-lg text-sm outline-none"
+            style={{ background: "#111318", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
+          <input value={price} onChange={(e) => setPrice(e.target.value)} placeholder="Price ($)" type="number" min="0" step="0.01"
+            className="w-full px-3 py-2.5 rounded-lg text-sm outline-none"
+            style={{ background: "#111318", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
+          <div className="flex gap-2">
+            {["truck", "cargo van"].map((v) => (
+              <button key={v} type="button" onClick={() => setVehicleType(v)}
+                className="flex-1 flex items-center justify-center gap-1.5 py-2 rounded-lg text-xs font-medium capitalize"
+                style={{ background: vehicleType === v ? ACCENT : "#111318", color: vehicleType === v ? "#111318" : "#F5F5F0", border: "1px solid #2B2F3A" }}>
+                <Truck size={13} /> {v}
+              </button>
+            ))}
+          </div>
+          {error && <p className="text-xs" style={{ color: "#FF6B6B" }}>{error}</p>}
+          <button type="submit" disabled={busy}
+            className="w-full py-2.5 rounded-lg text-sm font-medium" style={{ background: ACCENT, color: "#111318" }}>
+            {busy ? "Posting…" : "Post job"}
+          </button>
+        </form>
+      )}
+
+      {jobs.length === 0 ? (
+        <p className="text-xs text-center py-4" style={{ color: "#7A7F8A" }}>No open jobs right now.</p>
+      ) : (
+        <div className="space-y-2">
+          {jobs.map((job) => (
+            <div key={job.id} className="rounded-xl p-3" style={{ background: "#111318", border: "1px solid #2B2F3A" }}>
+              <div className="flex items-center justify-between mb-1">
+                <span className="text-xs font-medium capitalize flex items-center gap-1" style={{ color: ACCENT }}>
+                  <Truck size={12} /> {job.vehicleType}
+                </span>
+                <span className="text-sm font-semibold" style={{ color: "#F5F5F0" }}>${job.price.toFixed(2)}</span>
+              </div>
+              <p className="text-xs mb-0.5" style={{ color: "#F5F5F0" }}>{job.pickup} → {job.dropoff}</p>
+              <p className="text-xs mb-2" style={{ color: "#7A7F8A" }}>Posted by {job.postedByName}</p>
+              <button onClick={() => claim(job.id)}
+                className="w-full py-2 rounded-lg text-xs font-medium" style={{ background: ACCENT, color: "#111318" }}>
+                Claim job
+              </button>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+function LiveVideoPanel() {
+  return (
+    <div className="rounded-2xl p-4 flex flex-col items-center justify-center text-center" style={{ background: "#181B22", border: "1px solid #2B2F3A", minHeight: "180px" }}>
+      <Video size={20} color="#7A7F8A" className="mb-2" />
+      <p className="text-sm font-semibold mb-1" style={{ color: "#F5F5F0" }}>Live video</p>
+      <p className="text-xs" style={{ color: "#7A7F8A" }}>Live video from an active family ride will appear here once it's ready.</p>
     </div>
   );
 }
@@ -466,6 +607,12 @@ function FamilyDashboard({ person, family, onLogout }) {
         </div>
       )}
 
+      <div className="mx-6 mb-4 grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <JobBoard person={person} />
+        <LiveVideoPanel />
+      </div>
+
+      <ScrollingTicker />
       <AlertBanners />
 
       {isGuardian && (
