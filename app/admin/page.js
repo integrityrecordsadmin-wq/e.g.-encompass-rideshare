@@ -1,4 +1,3 @@
-
 "use client";
 import { useState, useEffect } from "react";
 import { Car, User, DollarSign, Search, CheckCircle2, CircleDot, Star, AlertTriangle, X, Megaphone } from "lucide-react";
