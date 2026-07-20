@@ -1,11 +1,4 @@
 "use client";
-import {
-  signUpDriver, loginDriver, signOut, updateDriverProfile,
-  updateRide, subscribeToRide, subscribeToNextPendingRide, subscribeToDriverRides, resetPassword,
-  setDriverOnlineStatus, startGoogleSignIn, completeGoogleSignInDriver, completeDriverGoogleSignup,
-  sendMagicLinkDriver, completeMagicLinkSignInDriver, completeDriverMagicLinkSignup,
-  updateDriverLocation,
-} from "../../lib/db";
 import { useState, useEffect, useRef } from "react";
 import {
   Navigation, User, Car, Clock, Check, X, Star, Power, DollarSign, MapPin, Shield, Mic, ChevronLeft, MessageCircle, BarChart3,
