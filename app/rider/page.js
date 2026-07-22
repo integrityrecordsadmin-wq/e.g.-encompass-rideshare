@@ -12,8 +12,8 @@ import { VEHICLE_TYPES } from "../../lib/vehicleTypes";
 import {
   signUpRider, loginRider, signOut, updateRiderProfile,
   createRide, subscribeToRide, resetPassword, createFamilyRideRoom, getOnlineDriverTokens,
-  startGoogleSignIn, completeGoogleSignInRider, sendMagicLinkRider, completeMagicLinkSignInRider,
-} from "../../lib/db";
+  } from "../../lib/supabase-db";
+
 import { sendPushNotification } from "../../lib/messaging";
 
 const HOME = { x: 20, y: 78 };
