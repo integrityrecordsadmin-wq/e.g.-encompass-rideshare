@@ -7,10 +7,10 @@ export default function ChatPanel({ rideId, mySender, otherName, quickReplies, o
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
 
-  useEffect(() => {
-    const unsub = subscribeToRide(rideId, (ride) => setMessages(ride.messages || []));
-    return unsub;
-  }, [rideId]);
+useEffect(() => {
+  const unsub = subscribeToRideMessages(rideId, setMessages);
+  return unsub;
+}, [rideId]);
 
   const send = async (t) => {
     const trimmed = t.trim();
