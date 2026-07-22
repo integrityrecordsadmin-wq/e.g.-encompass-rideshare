@@ -9,12 +9,12 @@ import {
   signUpFamily, loginFamily, resetPassword,
   createFamily, joinFamily, subscribeToFamily, leaveFamily, getFamilyMembers, removeFamilyMember,
   getMemberRideActivity, subscribeToActiveAnnouncements,
-  } from "../../lib/supabase-db";
+  from "../../lib/supabase-db";
   createJobPost, subscribeToOpenJobPosts, claimJobPost,
-} from "../../lib/db";
-
+} from "../../lib/supabase-db 
+    
 function FamilyAuthScreen({ onAuthed }) {
-  const [email, setEmail] = useState("");
+  const [email, setEmail] = useState(""); 
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [linkSent, setLinkSent] = useState(false);
