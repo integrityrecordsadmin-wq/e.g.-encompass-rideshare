@@ -2,8 +2,7 @@
 import { useState, useEffect } from "react";
 import { ChevronLeft, Send } from "lucide-react";
 import { ACCENT } from "../lib/tokens";
-import { subscribeToRide, appendRideMessage } from "../lib/db";
-
+import { subscribeToRideMessages, appendRideMessage } from "../lib/supabase-db";
 export default function ChatPanel({ rideId, mySender, otherName, quickReplies, onClose }) {
   const [messages, setMessages] = useState([]);
   const [text, setText] = useState("");
