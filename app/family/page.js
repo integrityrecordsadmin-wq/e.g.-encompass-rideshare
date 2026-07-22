@@ -5,13 +5,12 @@ import LiveTrackingMap from "./LiveTrackingMap";
 import { useState, useEffect } from "react";
 import { Users, Heart, Copy, LogOut, Car, DollarSign, AlertTriangle, Megaphone, Radio, Info, Briefcase, Truck, Video } from "lucide-react";
 import { ACCENT, AMBER } from "../../lib/tokens";
-import { 
+import {
   signUpFamily, loginFamily, resetPassword,
   createFamily, joinFamily, subscribeToFamily, leaveFamily, getFamilyMembers, removeFamilyMember,
   getMemberRideActivity, subscribeToActiveAnnouncements,
-  from "../../lib/supabase-db";
   createJobPost, subscribeToOpenJobPosts, claimJobPost,
-} from "../../lib/supabase-db 
+} from "../../lib/supabase-db";
     
 function FamilyAuthScreen({ onAuthed }) {
   const [email, setEmail] = useState(""); 
