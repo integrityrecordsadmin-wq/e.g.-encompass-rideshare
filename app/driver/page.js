@@ -322,13 +322,7 @@ function DriverHomeScreen({ driver, online, setOnline, onProfile, onIncomingRide
     const next = !online;
     try {
       if (next) {
-        let token = null;
-        try {
-          token = await registerForPush();
-        } catch (pushErr) {
-          console.error("Push registration failed, going online without it:", pushErr);
-        }
-        await setDriverOnlineStatus(driver.uid, true, token);
+        await setDriverOnlineStatus(driver.uid, true);
       } else {
         await setDriverOnlineStatus(driver.uid, false);
       }
