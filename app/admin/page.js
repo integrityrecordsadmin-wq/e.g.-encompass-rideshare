@@ -6,7 +6,7 @@ import {
   subscribeToAllRides, subscribeToDrivers, subscribeToRiders,
   scheduleVerificationCall, reviewDriverDocuments, updateDriverProfile, loginAdmin,
   subscribeToActiveAnnouncements, createAnnouncement, deactivateAnnouncement,
-} from "../../lib/db";
+} } from "../../lib/supabase-db";
 export const dynamic = "force-dynamic";
 const STATUS_META = {
   requested: { label: "Requested", color: MUTED },
