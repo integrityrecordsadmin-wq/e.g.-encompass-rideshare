@@ -15,7 +15,7 @@ import {
   sendMagicLinkDriver, completeMagicLinkSignInDriver, completeDriverMagicLinkSignup,
 updateDriverLocation,
 } from "../../lib/db";
-import { registerForPush } from "../../lib/messaging";
+} from "../../lib/supabase-db";
 export const dynamic = "force-dynamic";
 const PICKUP = { x: 78, y: 24 };
 const DROPOFF = { x: 22, y: 76 };
