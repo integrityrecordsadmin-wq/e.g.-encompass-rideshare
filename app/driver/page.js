@@ -14,7 +14,7 @@ import {
   setDriverOnlineStatus, startGoogleSignIn, completeGoogleSignInDriver, completeDriverGoogleSignup,
   sendMagicLinkDriver, completeMagicLinkSignInDriver, completeDriverMagicLinkSignup,
 updateDriverLocation,
-} from "../../lib/db";
+} from "../../lib/supabase-db";
 } from "../../lib/supabase-db";
 export const dynamic = "force-dynamic";
 const PICKUP = { x: 78, y: 24 };
