@@ -13,9 +13,6 @@ import {
   signUpRider, loginRider, signOut, updateRiderProfile,
   createRide, subscribeToRide, resetPassword, createFamilyRideRoom, getOnlineDriverTokens,
   } from "../../lib/supabase-db";
-
-import { sendPushNotification } from "../../lib/messaging";
-
 const HOME = { x: 20, y: 78 };
 const DEST = { x: 82, y: 22 };
 const DRIVER_START = { x: 8, y: 30 };
