@@ -89,6 +89,10 @@ function DriverAuthScreen({ onAuthed }) {
   }, 
   useEffect(() => 
     (async () => {
+      
+  }, 
+  useEffect(() => 
+    (async () => {
       try {
         const googleResult = await completeGoogleSignInDriver();
         if (googleResult) {
