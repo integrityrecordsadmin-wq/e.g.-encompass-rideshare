@@ -70,12 +70,7 @@ function DriverAuthScreen({ onAuthed }) {
     } catch (err) {
       setError(err.message?.replace("Firebase: ", "") || "Couldn't send the sign-in link.");
     }
-    setBusy(false);
-  };useEffect(() => {
-    const unsub = subscribeToRide(ride.id, (r) => setLiveMsgCount((r.messages || []).length));
-    return unsub;
-  }, [ride.id]);
-useEffect(() => {
+    useEffect(() => {
     if (phase !== "toDropoff" && phase !== "arrivedDropoff") return;
     if (!navigator.geolocation) return;
     let lastSent = 0;
@@ -91,7 +86,8 @@ useEffect(() => {
     );
     return () => navigator.geolocation.clearWatch(watchId);
   }, [phase, ride.id]);
-  useEffect(() => {
+  }, 
+  useEffect(() => 
     (async () => {
       try {
         const googleResult = await completeGoogleSignInDriver();
