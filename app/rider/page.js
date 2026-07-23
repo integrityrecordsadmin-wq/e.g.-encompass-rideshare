@@ -12,7 +12,8 @@ import { VEHICLE_TYPES } from "../../lib/vehicleTypes";
 import {
   signUpRider, loginRider, signOut, updateRiderProfile,
   createRide, subscribeToRide, resetPassword, createFamilyRideRoom, getOnlineDriverTokens,
-  } from "../../lib/supabase-db";
+  startGoogleSignIn, completeGoogleSignInRider, sendMagicLinkRider, completeMagicLinkSignInRider,
+} from "../../lib/supabase-db";
 const HOME = { x: 20, y: 78 };
 const DEST = { x: 82, y: 22 };
 const DRIVER_START = { x: 8, y: 30 };
