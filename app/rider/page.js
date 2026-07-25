@@ -352,7 +352,7 @@ const [returnTime, setReturnTime] = useState('');
         )}
       </div>
       <div className="p-4">
-        <button disabled={!canConfirm} onClick={() => onConfirm(dest.trim(), vehicle, finalFare, isFamilyRide)}
+        <button disabled={!canConfirm} onClick={() => onConfirm(dest.trim(), vehicle, finalFare, isFamilyRide, isRoundTrip, roundTripType, returnTime)}
           className="w-full py-3.5 rounded-xl font-medium text-base disabled:opacity-40" style={{ background: ACCENT, color: "#111318" }}>
           {dest.trim() ? `Confirm ${selectedVehicle.name} • $${finalFare.toFixed(2)}` : "Confirm destination"}
         </button>
