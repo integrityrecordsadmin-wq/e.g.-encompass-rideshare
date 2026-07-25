@@ -187,9 +187,109 @@ function SafetyToolkitScreen({ user, onBack, onUpdateUser }) {
     </div>
   );
 }
+function MyPlanScreen({ user, onBack }) {
+  const [plan, setPlan] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [showSignup, setShowSignup] = useState(false);
 
+  useEffect(() => {
+    async function load() {
+      const activePlan = await getRiderFlatratePlan(user.uid);
+      setPlan(activePlan);
+      setLoading(false);
+    }
+    load();
+  }, [user.uid]);
+
+  return (
+    <div className="w-full h-full flex flex-col" style={{ background: "#F5F5F0" }}>
+      <div className="flex items-center gap-3 p-4 pt-6">
+        <button onClick={onBack} aria-label="Back" className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: "#EDEBE2" }}>
+          <ChevronLeft size={18} color="#111318" />
+        </button>
+        <h2 className="text-base font-semibold" style={{ color: "#111318" }}>My Weekly Plan</h2>
+      </div>
+      <div className="px-4 mt-2 flex-1 overflow-y-auto">
+        {loading ? (
+          <p className="text-sm" style={{ color: "#7A7F8A" }}>Loading...</p>
+        ) : plan ? (
+          <PlanStatusCard plan={plan} />
+        ) : (
+          <NoPlanCard userId={user.uid} onRequested={() => setShowSignup(false)} />
+        )}
+      </div>
+    </div>
+  );
+}
+
+function PlanStatusCard({ plan }) {
+  if (plan.status === 'pending') {
+    return (
+      <div className="rounded-xl p-4" style={{ background: "#EDEBE2" }}>
+        <p className="font-semibold" style={{ color: "#111318" }}>Request pending</p>
+        <p className="text-sm mt-1" style={{ color: "#7A7F8A" }}>
+          We're reviewing your plan request. We'll notify you once it's approved.
+        </p>
+      </div>
+    );
+  }
+  return (
+    <div className="rounded-xl p-4" style={{ background: "#EDEBE2" }}>
+      <p className="font-semibold" style={{ color: "#111318" }}>Active Plan</p>
+      <p className="text-sm mt-1" style={{ color: "#7A7F8A" }}>
+        {plan.workdays.map(d => d.toUpperCase()).join(', ')} • {plan.rides_per_workday} rides/day • ${plan.weekly_price}/week
+      </p>
+    </div>
+  );
+}
+
+function NoPlanCard({ userId, onRequested }) {
+  const [ridesPerDay, setRidesPerDay] = useState(2);
+  const [workdays, setWorkdays] = useState(['mon','tue','wed','thu','fri']);
+  const [submitted, setSubmitted] = useState(false);
+  const days = [['sun','Sun'],['mon','Mon'],['tue','Tue'],['wed','Wed'],['thu','Thu'],['fri','Fri'],['sat','Sat']];
+
+  async function submit() {
+    await requestFlatratePlan(userId, ridesPerDay, workdays);
+    setSubmitted(true);
+  }
+
+  if (submitted) {
+    return (
+      <div className="rounded-xl p-4" style={{ background: "#EDEBE2" }}>
+        <p className="font-semibold" style={{ color: "#111318" }}>Request sent!</p>
+        <p className="text-sm mt-1" style={{ color: "#7A7F8A" }}>We'll follow up once your plan is approved.</p>
+      </div>
+    );
+  }
+
+  return (
+    <div className="rounded-xl p-4" style={{ background: "#EDEBE2" }}>
+      <p className="font-semibold mb-2" style={{ color: "#111318" }}>Request a Weekly Work Ride Plan</p>
+      <p className="text-sm mb-3" style={{ color: "#7A7F8A" }}>Flat weekly rate for standard vehicle commute rides.</p>
+      <label className="text-sm" style={{ color: "#111318" }}>Rides per workday</label>
+      <input type="number" min="1" max="10" value={ridesPerDay}
+        onChange={(e) => setRidesPerDay(Number(e.target.value))}
+        className="border rounded p-2 w-full mt-1 mb-3" />
+      <label className="text-sm" style={{ color: "#111318" }}>Work days</label>
+      <div className="flex gap-2 flex-wrap mt-1 mb-3">
+        {days.map(([key, label]) => (
+          <button key={key} type="button"
+            onClick={() => setWorkdays(w => w.includes(key) ? w.filter(d => d !== key) : [...w, key])}
+            className={`px-3 py-1 rounded-full text-xs`}
+            style={{ background: workdays.includes(key) ? "#111318" : "#fff", color: workdays.includes(key) ? "#fff" : "#111318" }}>
+            {label}
+          </button>
+        ))}
+      </div>
+      <button onClick={submit} className="w-full py-3 rounded-xl font-medium" style={{ background: "#111318", color: "#F5F5F0" }}>
+        Request Plan
+      </button>
+    </div>
+  );
+          }
 // ---------- Home ----------
-function HomeScreen({ user, onRequest, onLogout, onSafety }) {
+function HomeScreen({ user, onRequest, onLogout, onSafety, onMyPlan }) {
   return (
     <div className="relative w-full h-full">
       <div className="absolute inset-0"><CityMap driverPos={null} showRoute={false} /></div>
@@ -214,7 +314,10 @@ function HomeScreen({ user, onRequest, onLogout, onSafety }) {
           style={{ background: "#111318" }}>
           <Search size={17} color="#7A7F8A" />
           <span className="text-sm" style={{ color: "#9CA0AA" }}>Enter destination</span>
-        </button>
+        </button>onClick={onMyPlan} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl mt-2"
+  style={{ background: "#EDEBE2" }}>
+  <span style={{ color: "#111318" }}>My Weekly Plan</span>
+</button>
         <div className="mt-5">
           <p className="text-xs uppercase tracking-wide mb-2" style={{ color: "#9A9890" }}>Suggestions</p>
           {["Downtown Office", "The Studio", "Riverside Market"].map((place) => (
