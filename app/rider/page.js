@@ -611,16 +611,25 @@ export default function RiderApp() {
   const [rideId, setRideId] = useState(null);
   const [finalDriverName, setFinalDriverName] = useState("");
 
-  const handleConfirmDestination = async (dest, vehicleType, finalFare, isFamilyRide) => {
-    setDestination(dest);
-    const trip = seededTrip(dest);
-    const id = await createRide({
-      riderName: user.name, riderUid: user.uid,
-      destination: dest, fare: finalFare, miles: trip.miles, minutes: trip.minutes,
-      vehicleType,
-      isFamilyRide: !!isFamilyRide,
-      riderRecording: !!user.audioRecordingEnabled,
-    });
+  const handleConfirmDestination = async (dest, vehicleType, finalFare, isFamilyRide, isRoundTrip, roundTripType, returnTime) => {
+  setDestination(dest);
+  const trip = seededTrip(dest);
+
+  const rideData = {
+    riderName: user.name, riderUid: user.uid,
+    destination: dest, fare: finalFare, miles: trip.miles, minutes: trip.minutes,
+    vehicleType,
+    isFamilyRide: !!isFamilyRide,
+    riderRecording: !!user.audioRecordingEnabled,
+  };
+
+  let id;
+  if (isRoundTrip) {
+    const result = await createRoundTripRide({ ...rideData, roundTripType, returnTime });
+    id = result.outbound ? result.outbound.id : result.id;
+  } else {
+    id = await createRide(rideData);
+  }
     if (isFamilyRide) {
       try { await createFamilyRideRoom(id); } catch (e) { /* room creation failed — trip still proceeds without video */ }
     }
