@@ -235,7 +235,9 @@ function DestinationScreen({ onBack, onConfirm }) {
   const [vehicle, setVehicle] = useState("standard");
   const [isFamilyRide, setIsFamilyRide] = useState(false);
   const [familyConsent, setFamilyConsent] = useState(false);
-
+const [isRoundTrip, setIsRoundTrip] = useState(false);
+const [roundTripType, setRoundTripType] = useState('same_driver');
+const [returnTime, setReturnTime] = useState('');
   const baseTrip = dest.trim() ? seededTrip(dest.trim()) : null;
   const baseFare = dest.trim() ? fareFor(dest.trim()).fare : 0;
   const selectedVehicle = VEHICLE_TYPES.find((v) => v.id === vehicle);
@@ -261,7 +263,30 @@ function DestinationScreen({ onBack, onConfirm }) {
             name="ride-destination-field" autoComplete="off" autoCorrect="off" spellCheck="false"
             className="text-sm outline-none w-full bg-transparent" style={{ color: "#111318" }} />
         </div>
+<label className="flex items-center gap-2 mt-3">
+  <input type="checkbox" checked={isRoundTrip} onChange={(e) => setIsRoundTrip(e.target.checked)} />
+  <span className="text-sm" style={{ color: "#111318" }}>Round trip?</span>
+</label>
 
+{isRoundTrip && (
+  <div className="mt-2 space-y-2">
+    <label className="flex items-center gap-2 text-sm">
+      <input type="radio" checked={roundTripType === 'same_driver'} onChange={() => setRoundTripType('same_driver')} />
+      Same driver waits & brings me back
+    </label>
+    <label className="flex items-center gap-2 text-sm">
+      <input type="radio" checked={roundTripType === 'separate_rides'} onChange={() => setRoundTripType('separate_rides')} />
+      Book as two separate rides
+    </label>
+    <input
+      type="datetime-local"
+      value={returnTime}
+      onChange={(e) => setReturnTime(e.target.value)}
+      className="text-sm outline-none w-full bg-transparent border rounded p-2"
+      style={{ color: "#111318" }}
+    />
+  </div>
+)}
         {dest.trim() && (
           <>
             <div>
