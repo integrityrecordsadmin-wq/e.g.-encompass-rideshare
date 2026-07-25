@@ -314,7 +314,8 @@ function HomeScreen({ user, onRequest, onLogout, onSafety, onMyPlan }) {
           style={{ background: "#111318" }}>
           <Search size={17} color="#7A7F8A" />
           <span className="text-sm" style={{ color: "#9CA0AA" }}>Enter destination</span>
-        </button>onClick={onMyPlan} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl mt-2"
+        </button>
+<button onClick={onMyPlan} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl mt-2"
   style={{ background: "#EDEBE2" }}>
   <span style={{ color: "#111318" }}>My Weekly Plan</span>
 </button>
