@@ -5,9 +5,9 @@ import { ACCENT, AMBER, BG, CARD, BORDER, MUTED, TEXT } from "../../lib/tokens";
 import {
   subscribeToAllRides, subscribeToDrivers, subscribeToRiders,
   scheduleVerificationCall, reviewDriverDocuments, updateDriverProfile, loginAdmin,
- subscribeToActiveAnnouncements, createAnnouncement, deactivateAnnouncements,
-getPendingFlatratePlans, approveFlatratePlan, rejectFlatratePlan,
- } from "../../lib/supabase-db";
+  subscribeToActiveAnnouncements, createAnnouncement, deactivateAnnouncements,
+  getPendingFlatratePlans, approveFlatratePlan, rejectFlatratePlan,
+} from "../../lib/supabase-db";
 export const dynamic = "force-dynamic";
 const STATUS_META = {
   requested: { label: "Requested", color: MUTED },
@@ -33,12 +33,50 @@ function timeAgo(ts) {
   if (mins < 60) return `${mins}m ago`;
   return `${Math.floor(mins / 60)}h ago`;
 }
-function PendingPlansPanel() {
-    const [pending, setPending] = useState([]);
-    const [loading, setLoading] = useState(true);
 
-    useEffect(() => {
-      async function load() {
+function InstallAppButton() {
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [installed, setInstalled] = useState(false);
+
+  useEffect(() => {
+    function handleBeforeInstall(e) {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    }
+    function handleInstalled() {
+      setInstalled(true);
+      setDeferredPrompt(null);
+    }
+    window.addEventListener("beforeinstallprompt", handleBeforeInstall);
+    window.addEventListener("appinstalled", handleInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstall);
+      window.removeEventListener("appinstalled", handleInstalled);
+    };
+  }, []);
+
+  if (installed || !deferredPrompt) return null;
+
+  async function handleInstall() {
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    setDeferredPrompt(null);
+  }
+
+  return (
+    <button onClick={handleInstall} className="px-4 py-2 rounded-xl text-sm font-medium flex-shrink-0"
+      style={{ background: CARD, color: TEXT, border: `1px solid ${BORDER}` }}>
+      Download App
+    </button>
+  );
+}
+
+function PendingPlansPanel() {
+  const [pending, setPending] = useState([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    async function load() {
       const data = await getPendingFlatratePlans();
       setPending(data || []);
       setLoading(false);
@@ -83,6 +121,7 @@ function PlanApprovalRow({ plan, onApprove, onReject }) {
     </div>
   );
 }
+
 function daysUntil(ts) {
   if (!ts) return null;
   return Math.ceil((ts - Date.now()) / (1000 * 60 * 60 * 24));
@@ -304,7 +343,7 @@ function AnnouncementsPanel() {
   };
 
   const handleRemove = async (id) => {
-    await deactivateAnnouncement(id);
+    await deactivateAnnouncements(id);
   };
 
   return (
@@ -423,9 +462,12 @@ function AdminDashboard() {
             <h1 className="text-2xl font-semibold tracking-tight" style={{ color: TEXT }}>Rides admin</h1>
             <p className="text-sm mt-0.5" style={{ color: MUTED }}>Live — updates instantly, no refresh needed</p>
           </div>
+          <InstallAppButton />
         </div>
 
         <InsuranceExpiryBanner drivers={drivers} />
+
+        <PendingPlansPanel />
 
         <div className="grid grid-cols-2 md:grid-cols-4 gap-3 mb-8">
           <StatCard icon={Car} label="Total rides" value={rides.length} />
