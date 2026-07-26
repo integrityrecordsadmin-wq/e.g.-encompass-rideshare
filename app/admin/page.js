@@ -6,7 +6,7 @@ import {
   subscribeToAllRides, subscribeToDrivers, subscribeToRiders,
   scheduleVerificationCall, reviewDriverDocuments, updateDriverProfile, loginAdmin,
   subscribeToActiveAnnouncements, createAnnouncement, deactivateAnnouncements,
-  getPendingFlatratePlans, approveFlatratePlan, rejectFlatratePlan,
+  getPendingFlatratePlans, approveFlatratePlan, rejectFlatratePlan, resetPassword,
 } from "../../lib/supabase-db";
 export const dynamic = "force-dynamic";
 const STATUS_META = {
@@ -391,6 +391,8 @@ function AdminAuthScreen({ onAuthed }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  const [showForgot, setShowForgot] = useState(false);
+  const [resetSent, setResetSent] = useState(false);
 
   const submit = async (e) => {
     e.preventDefault();
@@ -405,6 +407,42 @@ function AdminAuthScreen({ onAuthed }) {
     setBusy(false);
   };
 
+  const submitReset = async (e) => {
+    e.preventDefault();
+    setError("");
+    if (!email.trim()) { setError("Enter your email first."); return; }
+    setBusy(true);
+    try {
+      await resetPassword(email.trim().toLowerCase(), "/admin");
+      setResetSent(true);
+    } catch (err) {
+      setError(err.message?.replace("Firebase: ", "") || "Couldn't send the reset email.");
+    }
+    setBusy(false);
+  };
+
+  if (showForgot) {
+    return (
+      <div className="w-full min-h-screen flex items-center justify-center px-8" style={{ background: BG }}>
+        <form onSubmit={submitReset} className="w-full max-w-sm space-y-3">
+          <h1 className="text-xl font-semibold mb-1" style={{ color: TEXT }}>Reset password</h1>
+          <p className="text-sm mb-3" style={{ color: MUTED }}>Enter your admin email and we'll send a reset link.</p>
+          <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" type="email"
+            className="w-full px-4 py-3 rounded-xl text-sm outline-none" style={{ background: CARD, color: TEXT, border: `1px solid ${BORDER}` }} />
+          {resetSent && <p className="text-sm" style={{ color: "#4ADE80" }}>Check your email for a reset link.</p>}
+          {error && <p className="text-sm" style={{ color: "#FF6B6B" }}>{error}</p>}
+          <button type="submit" disabled={busy} className="w-full py-3 rounded-xl font-medium text-sm" style={{ background: ACCENT, color: "#111318" }}>
+            {busy ? "One sec…" : "Send reset link"}
+          </button>
+          <button type="button" onClick={() => { setShowForgot(false); setError(""); setResetSent(false); }}
+            className="w-full text-sm text-center font-medium py-2" style={{ color: ACCENT }}>
+            Back to log in
+          </button>
+        </form>
+      </div>
+    );
+  }
+
   return (
     <div className="w-full min-h-screen flex items-center justify-center px-8" style={{ background: BG }}>
       <form onSubmit={submit} className="w-full max-w-sm space-y-3">
@@ -416,6 +454,10 @@ function AdminAuthScreen({ onAuthed }) {
         {error && <p className="text-sm" style={{ color: "#FF6B6B" }}>{error}</p>}
         <button type="submit" disabled={busy} className="w-full py-3 rounded-xl font-medium text-sm" style={{ background: ACCENT, color: "#111318" }}>
           {busy ? "One sec…" : "Log in"}
+        </button>
+        <button type="button" onClick={() => { setShowForgot(true); setError(""); }}
+          className="w-full text-sm text-center font-medium py-1" style={{ color: ACCENT }}>
+          Forgot password?
         </button>
       </form>
     </div>
