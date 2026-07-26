@@ -251,7 +251,42 @@ function DriverHomeScreen({ driver, online, setOnline, onProfile, onIncomingRide
     const unsub = subscribeToNextPendingRide(driver.vehicleType, (ride) => onIncomingRide(ride));
     return unsub;
   }, [online]);
+function InstallAppButton() {
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [installed, setInstalled] = useState(false);
 
+  useEffect(() => {
+    function handleBeforeInstall(e) {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    }
+    function handleInstalled() {
+      setInstalled(true);
+      setDeferredPrompt(null);
+    }
+    window.addEventListener("beforeinstallprompt", handleBeforeInstall);
+    window.addEventListener("appinstalled", handleInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstall);
+      window.removeEventListener("appinstalled", handleInstalled);
+    };
+  }, []);
+
+  if (installed || !deferredPrompt) return null;
+
+  async function handleInstall() {
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    setDeferredPrompt(null);
+  }
+
+  return (
+    <button onClick={handleInstall} className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl mt-3"
+      style={{ background: "#EDEBE2" }}>
+      <span style={{ color: "#111318" }}>Download App</span>
+    </button>
+  );
+}
   const vehicleInfo = VEHICLE_TYPES.find((v) => v.id === (driver.vehicleType || "standard"));
 
   const handleToggleOnline = async () => {
