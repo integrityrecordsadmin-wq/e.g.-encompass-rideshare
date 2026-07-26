@@ -181,6 +181,43 @@ function DriverAuthScreen({ onAuthed }) {
   );
 }
 
+function InstallAppButton() {
+  const [deferredPrompt, setDeferredPrompt] = useState(null);
+  const [installed, setInstalled] = useState(false);
+
+  useEffect(() => {
+    function handleBeforeInstall(e) {
+      e.preventDefault();
+      setDeferredPrompt(e);
+    }
+    function handleInstalled() {
+      setInstalled(true);
+      setDeferredPrompt(null);
+    }
+    window.addEventListener("beforeinstallprompt", handleBeforeInstall);
+    window.addEventListener("appinstalled", handleInstalled);
+    return () => {
+      window.removeEventListener("beforeinstallprompt", handleBeforeInstall);
+      window.removeEventListener("appinstalled", handleInstalled);
+    };
+  }, []);
+
+  if (installed || !deferredPrompt) return null;
+
+  async function handleInstall() {
+    deferredPrompt.prompt();
+    await deferredPrompt.userChoice;
+    setDeferredPrompt(null);
+  }
+
+  return (
+    <button onClick={handleInstall} className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl mt-3"
+      style={{ background: "#EDEBE2" }}>
+      <span style={{ color: "#111318" }}>Download App</span>
+    </button>
+  );
+}
+
 // ---------- Safety Toolkit ----------
 function SafetyToolkitScreen({ driver, onBack, onUpdateDriver }) {
   const [enabled, setEnabled] = useState(!!driver.audioRecordingEnabled);
@@ -251,42 +288,7 @@ function DriverHomeScreen({ driver, online, setOnline, onProfile, onIncomingRide
     const unsub = subscribeToNextPendingRide(driver.vehicleType, (ride) => onIncomingRide(ride));
     return unsub;
   }, [online]);
-function InstallAppButton() {
-  const [deferredPrompt, setDeferredPrompt] = useState(null);
-  const [installed, setInstalled] = useState(false);
 
-  useEffect(() => {
-    function handleBeforeInstall(e) {
-      e.preventDefault();
-      setDeferredPrompt(e);
-    }
-    function handleInstalled() {
-      setInstalled(true);
-      setDeferredPrompt(null);
-    }
-    window.addEventListener("beforeinstallprompt", handleBeforeInstall);
-    window.addEventListener("appinstalled", handleInstalled);
-    return () => {
-      window.removeEventListener("beforeinstallprompt", handleBeforeInstall);
-      window.removeEventListener("appinstalled", handleInstalled);
-    };
-  }, []);
-
-  if (installed || !deferredPrompt) return null;
-
-  async function handleInstall() {
-    deferredPrompt.prompt();
-    await deferredPrompt.userChoice;
-    setDeferredPrompt(null);
-  }
-
-  return (
-    <button onClick={handleInstall} className="w-full flex items-center justify-center gap-2 px-4 py-3 rounded-xl mt-3"
-      style={{ background: "#EDEBE2" }}>
-      <span style={{ color: "#111318" }}>Download App</span>
-    </button>
-  );
-}
   const vehicleInfo = VEHICLE_TYPES.find((v) => v.id === (driver.vehicleType || "standard"));
 
   const handleToggleOnline = async () => {
@@ -349,16 +351,8 @@ function InstallAppButton() {
         </button>
         <p className="text-xs text-center mt-3" style={{ color: "#9A9890" }}>
           {online ? "You're online — listening for real ride requests…" : "You're offline. Go online to start receiving requests."}
-        <button onClick={handleToggleOnline}
-  className="w-full mt-5 py-4 rounded-xl font-medium text-base flex items-center justify-center gap-2 active:scale-[0.98] transition"
-  style={{ background: online ? "#111318" : ACCENT, color: online ? AMBER : "#111318" }}>
-  <Power size={17} />
-  {online ? "Go offline" : "Go online"}
-</button>
-<p className="text-xs text-center mt-3" style={{ color: "#9A9890" }}>
-  {online ? "You're online — listening for real ride requests…" : "You're offline. Go online to start receiving requests."}
-</p>
-<InstallAppButton />
+        </p>
+        <InstallAppButton />
       </div>
     </div>
   );
