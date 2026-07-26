@@ -34,11 +34,11 @@ function timeAgo(ts) {
   return `${Math.floor(mins / 60)}h ago`;
 }
 function PendingPlansPanel() {
-  const [pending, setPending] = useState([]);
-  const [loading, setLoading] = useState(true);
+    const [pending, setPending] = useState([]);
+    const [loading, setLoading] = useState(true);
 
-  useEffect(() => {
-    async function load() {
+    useEffect(() => {
+      async function load() {
       const data = await getPendingFlatratePlans();
       setPending(data || []);
       setLoading(false);
