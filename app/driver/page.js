@@ -61,18 +61,22 @@ function DriverAuthScreen({ onAuthed }) {
   };
 
   useEffect(() => {
-    (async () => {
-      try {
-        const googleResult = await completeGoogleSignInDriver();
-        if (googleResult) {
-          if (googleResult.needsVehicleInfo) {
-            setPending({ ...googleResult, source: "google" });
-            setName(googleResult.name || "");
-          } else {
-            onAuthed(googleResult);
-          }
-          return;
+  (async () => {
+    try {
+      const magicResult = await completeMagicLinkSignInDriver();
+      if (magicResult) {
+        if (magicResult.needsVehicleInfo) {
+          setPending({ ...magicResult, source: "magic" });
+          setName(magicResult.name || "");
+        } else {
+          onAuthed(magicResult);
         }
+      }
+    } catch (err) {
+      setError(err.message?.replace("Firebase: ", "") || "Sign-in failed.");
+    }
+  })();
+}, []);
         const magicResult = await completeMagicLinkSignInDriver();
         if (magicResult) {
           if (magicResult.needsVehicleInfo) {
