@@ -174,22 +174,21 @@ function DriverAuthScreen({ onAuthed }) {
         <button type="button" onClick={handleSendMagicLink} disabled={busy}
           className="w-full py-3.5 rounded-xl font-medium text-base mt-1 transition active:scale-[0.98]"
           style={{ background: ACCENT, color: "#111318" }}>
-          {busy ? "One sec…" : "Encompass Rideshare"}
+          </button>
+        <button type="button" onClick={() => setShowHelp((s) => !s)}
+          className="mt-6 text-sm text-center font-medium" style={{ color: ACCENT }}>
+          Trouble signing in?
         </button>
+        {showHelp && (
+          <div className="mt-3 rounded-xl p-3 text-xs leading-relaxed" style={{ background: "#1D2028", color: "#B9BBC2", border: "1px solid #2B2F3A" }}>
+            <p className="mb-1.5">• Use the same email every time you sign in — sign-ins aren't shared across different emails.</p>
+            <p>• Open the sign-in link on this same device to finish signing in.</p>
+          </div>
+        )}
       </div>
-      <button type="button" onClick={() => setShowHelp((s) => !s)}
-        className="mt-6 text-sm text-center font-medium" style={{ color: ACCENT }}>
-        Trouble signing in?
-      </button>
-      {showHelp && (
-        <div className="mt-3 rounded-xl p-3 text-xs leading-relaxed" style={{ background: "#1D2028", color: "#B9BBC2", border: "1px solid #2B2F3A" }}>
-          <p className="mb-1.5">• If "Continue with Google" doesn't finish, tap it again — sometimes it needs a second try.</p>
-          <p className="mb-1.5">• Use the same sign-in method (Google or email) every time — they don't share one account.</p>
-          <p>• With email, open the link on this same device to finish signing in.</p>
-        </div>
-      )}
     </div>
   );
+}
 }
 
 // ---------- Safety Toolkit ----------
