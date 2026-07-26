@@ -349,7 +349,16 @@ function InstallAppButton() {
         </button>
         <p className="text-xs text-center mt-3" style={{ color: "#9A9890" }}>
           {online ? "You're online — listening for real ride requests…" : "You're offline. Go online to start receiving requests."}
-        </p>
+        <button onClick={handleToggleOnline}
+  className="w-full mt-5 py-4 rounded-xl font-medium text-base flex items-center justify-center gap-2 active:scale-[0.98] transition"
+  style={{ background: online ? "#111318" : ACCENT, color: online ? AMBER : "#111318" }}>
+  <Power size={17} />
+  {online ? "Go offline" : "Go online"}
+</button>
+<p className="text-xs text-center mt-3" style={{ color: "#9A9890" }}>
+  {online ? "You're online — listening for real ride requests…" : "You're offline. Go online to start receiving requests."}
+</p>
+<InstallAppButton />
       </div>
     </div>
   );
