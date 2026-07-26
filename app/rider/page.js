@@ -755,28 +755,30 @@ export default function RiderApp() {
     setRideId(id);
     setScreen("finding");
   };
+const handleAccepted = (ride) => { setFinalDriverName(ride.driverName || ""); setScreen("tracking"); };
+    const handleComplete = (ride) => { setFinalDriverName(ride.driverName || ""); setScreen("complete"); };
 
-  const handleAccepted = (ride) => { setFinalDriverName(ride.driverName || ""); setScreen("tracking"); };
-  const handleComplete = (ride) => { setFinalDriverName(ride.driverName || ""); setScreen("complete"); };
+    if (!user) {
+      return (
+        <div className="w-full h-screen max-w-sm mx-auto overflow-hidden sm:rounded-[2rem] sm:h-[700px] sm:my-8 relative"
+          style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.4)" }}>
+          <AuthScreen onAuthed={(u) => { setUser(u); setScreen("home"); }} />
+        </div>
+      );
+    }
 
-  if (!user) {
     return (
       <div className="w-full h-screen max-w-sm mx-auto overflow-hidden sm:rounded-[2rem] sm:h-[700px] sm:my-8 relative"
         style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.4)" }}>
-        <AuthScreen onAuthed={(u) => { setUser(u); setScreen("home"); }} />
+        {screen === "home" && <HomeScreen user={user} onRequest={() => setScreen("destination")} onLogout={async () => { await signOut(); setUser(null); }} onSafety={() => setScreen("safety")} onMyPlan={() => setScreen("myplan")} />}
+        {screen === "myplan" && <MyPlanScreen user={user} onBack={() => setScreen("home")} />}
+        {screen === "safety" && <SafetyToolkitScreen user={user} onBack={() => setScreen("home")} onUpdateUser={setUser} />}
+        {screen === "destination" && <DestinationScreen onBack={() => setScreen("home")} onConfirm={handleConfirmDestination} />}
+        {screen === "finding" && <FindingDriverScreen rideId={rideId} destination={destination} onAccepted={handleAccepted} onCancelled={() => setScreen("home")} />}
+        {screen === "tracking" && <TrackingScreen rideId={rideId} destination={destination} onComplete={handleComplete} />}
+        {screen === "complete" && <CompleteScreen destination={destination} driverName={finalDriverName} onDone={() => setScreen("home")} />}
       </div>
     );
-  }
-
-  return (
-    <div className="w-full h-screen max-w-sm mx-auto overflow-hidden sm:rounded-[2rem] sm:h-[700px] sm:my-8 relative"
-      style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.4)" }}>
-      {screen === "home" && <HomeScreen user={user} onRequest={() => setScreen("destination")} onLogout={async () => { await signOut(); setUser(null); }} onSafety={() => setScreen("safety")} />}
-      {screen === "safety" && <SafetyToolkitScreen user={user} onBack={() => setScreen("home")} onUpdateUser={setUser} />}
-      {screen === "destination" && <DestinationScreen onBack={() => setScreen("home")} onConfirm={handleConfirmDestination} />}
-      {screen === "finding" && <FindingDriverScreen rideId={rideId} destination={destination} onAccepted={handleAccepted} onCancelled={() => setScreen("home")} />}
-      {screen === "tracking" && <TrackingScreen rideId={rideId} destination={destination} onComplete={handleComplete} />}
-      {screen === "complete" && <CompleteScreen destination={destination} driverName={finalDriverName} onDone={() => setScreen("home")} />}
-    </div>
-  );
+  
+  
 }
