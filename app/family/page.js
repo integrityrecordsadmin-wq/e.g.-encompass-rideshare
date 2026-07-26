@@ -7,27 +7,18 @@ import { Users, Heart, Copy, LogOut, Car, DollarSign, AlertTriangle, Megaphone, 
 import { ACCENT, AMBER } from "../../lib/tokens";
 import {
   signUpFamily, loginFamily, resetPassword,
+  sendMagicLinkFamily, completeMagicLinkSignInFamily,
   createFamily, joinFamily, subscribeToFamily, leaveFamily, getFamilyMembers, removeFamilyMember,
   getMemberRideActivity, subscribeToActiveAnnouncements,
   createJobPost, subscribeToOpenJobPosts, claimJobPost,
 } from "../../lib/supabase-db";
-    
+
 function FamilyAuthScreen({ onAuthed }) {
-  const [email, setEmail] = useState(""); 
+  const [email, setEmail] = useState("");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
   const [linkSent, setLinkSent] = useState(false);
   const [showHelp, setShowHelp] = useState(false);
-  const handleGoogleSignIn = async () => {
-    setError("");
-    setBusy(true);
-    try {
-      await startGoogleSignIn();
-    } catch (err) {
-      setError(err.message?.replace("Firebase: ", "") || "Google sign-in failed.");
-      setBusy(false);
-    }
-  };
 
   const handleSendMagicLink = async () => {
     setError("");
@@ -49,8 +40,6 @@ function FamilyAuthScreen({ onAuthed }) {
   useEffect(() => {
     (async () => {
       try {
-        const googleResult = await completeGoogleSignInFamily();
-        if (googleResult) { onAuthed(googleResult); return; }
         const magicResult = await completeMagicLinkSignInFamily();
         if (magicResult) onAuthed(magicResult);
       } catch (err) {
@@ -75,17 +64,6 @@ function FamilyAuthScreen({ onAuthed }) {
           Log in to see rides and jobs across your whole family.
         </p>
       </div>
-      <button type="button" onClick={handleGoogleSignIn} disabled={busy}
-        className="w-full py-3.5 rounded-xl font-medium text-base flex items-center justify-center gap-2.5 mb-3"
-        style={{ background: "#F5F5F0", color: "#111318" }}>
-        <svg width="18" height="18" viewBox="0 0 18 18"><path fill="#4285F4" d="M17.64 9.2c0-.64-.06-1.25-.16-1.84H9v3.48h4.84c-.21 1.13-.84 2.09-1.79 2.73v2.27h2.9c1.7-1.56 2.68-3.87 2.68-6.64z"/><path fill="#34A853" d="M9 18c2.43 0 4.47-.8 5.96-2.18l-2.9-2.27c-.81.54-1.84.86-3.06.86-2.35 0-4.34-1.59-5.05-3.72H.95v2.34C2.44 15.98 5.48 18 9 18z"/><path fill="#FBBC05" d="M3.95 10.69c-.18-.54-.28-1.11-.28-1.69s.1-1.15.28-1.69V4.97H.95C.35 6.17 0 7.55 0 9s.35 2.83.95 4.03l3-2.34z"/><path fill="#EA4335" d="M9 3.58c1.32 0 2.51.46 3.44 1.35l2.58-2.58C13.46.89 11.43 0 9 0 5.48 0 2.44 2.02.95 4.97l3 2.34C4.66 5.17 6.65 3.58 9 3.58z"/></svg>
-        Continue with Google
-      </button>
-      <div className="flex items-center gap-3 py-1 mb-2">
-        <div className="flex-1 h-px" style={{ background: "#2B2F3A" }} />
-        <span className="text-xs" style={{ color: "#7A7F8A" }}>or</span>
-        <div className="flex-1 h-px" style={{ background: "#2B2F3A" }} />
-      </div>
       <div className="space-y-3">
         <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" type="email"
           autoComplete="email"
@@ -107,9 +85,8 @@ function FamilyAuthScreen({ onAuthed }) {
       </button>
       {showHelp && (
         <div className="mt-3 rounded-xl p-3 text-xs leading-relaxed" style={{ background: "#1D2028", color: "#B9BBC2", border: "1px solid #2B2F3A" }}>
-          <p className="mb-1.5">• If "Continue with Google" doesn't finish, tap it again — sometimes it needs a second try.</p>
-          <p className="mb-1.5">• Use the same sign-in method (Google or email) every time — they don't share one account.</p>
-          <p>• With email, open the link on this same device to finish signing in.</p>
+          <p className="mb-1.5">• Use the same email every time you sign in — sign-ins aren't shared across different emails.</p>
+          <p>• Open the sign-in link on this same device to finish signing in.</p>
         </div>
       )}
     </div>
@@ -668,20 +645,20 @@ function FamilyDashboard({ person, family, onLogout }) {
           <p className="text-xs uppercase tracking-wide" style={{ color: "#7A7F8A" }}>Recent activity</p>
         </div>
         <ActivityFeed members={members} />
-        </div>
-
-        <ShareQRCode url="https://encompassrs.com/family" label="Share Family Hub" />
-
-        <div className="px-6 py-5">
-          <button onClick={handleLeave}
-            className="w-full py-3 rounded-xl font-medium text-sm flex items-center justify-center gap-2"
-            style={{ background: "#1D2028", color: "#FF6B6B", border: "1px solid #2B2F3A" }}>
-            <LogOut size={15} /> Leave family
-          </button>
-        </div>
       </div>
-    );
-  }
+
+      <ShareQRCode url="https://encompassrs.com/family" label="Share Family Hub" />
+
+      <div className="px-6 py-5">
+        <button onClick={handleLeave}
+          className="w-full py-3 rounded-xl font-medium text-sm flex items-center justify-center gap-2"
+          style={{ background: "#1D2028", color: "#FF6B6B", border: "1px solid #2B2F3A" }}>
+          <LogOut size={15} /> Leave family
+        </button>
+      </div>
+    </div>
+  );
+}
 
 export default function FamilyApp() {
   const [person, setPerson] = useState(null);
