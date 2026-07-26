@@ -44,18 +44,6 @@ function DriverAuthScreen({ onAuthed }) {
   const [linkSent, setLinkSent] = useState(false);
   const [pending, setPending] = useState(null);
   const [showHelp, setShowHelp] = useState(false);
-
-  const handleGoogleSignIn = async () => {
-    setError("");
-    setBusy(true);
-    try {
-      await startGoogleSignIn();
-    } catch (err) {
-      setError(err.message?.replace("Firebase: ", "") || "Google sign-in failed.");
-      setBusy(false);
-    }
-  };
-
   const handleSendMagicLink = async () => {
     setError("");
     const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
