@@ -171,7 +171,7 @@ function DriverAuthScreen({ onAuthed }) {
         <p className="mt-1 text-sm" style={{ color: "#7A7F8A" }}>Sign in to go online.</p>
       </div>
       
-        )}
+        </div>
         {error && <p className="text-sm" style={{ color: "#FF6B6B" }}>{error}</p>}
         <button type="button" onClick={handleSendMagicLink} disabled={busy}
           className="w-full py-3.5 rounded-xl font-medium text-base mt-1 transition active:scale-[0.98]"
