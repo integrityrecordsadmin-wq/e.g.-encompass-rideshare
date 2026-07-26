@@ -33,7 +33,56 @@ function timeAgo(ts) {
   if (mins < 60) return `${mins}m ago`;
   return `${Math.floor(mins / 60)}h ago`;
 }
+function PendingPlansPanel() {
+  const [pending, setPending] = useState([]);
+  const [loading, setLoading] = useState(true);
 
+  useEffect(() => {
+    async function load() {
+      const data = await getPendingFlatratePlans();
+      setPending(data || []);
+      setLoading(false);
+    }
+    load();
+  }, []);
+
+  async function handleApprove(planId, price) {
+    await approveFlatratePlan(planId, price);
+    setPending((p) => p.filter((x) => x.id !== planId));
+  }
+
+  async function handleReject(planId) {
+    await rejectFlatratePlan(planId);
+    setPending((p) => p.filter((x) => x.id !== planId));
+  }
+
+  if (loading) return null;
+  if (pending.length === 0) return null;
+
+  return (
+    <div className="rounded-xl p-4 mb-4" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
+      <h3 className="font-semibold mb-2" style={{ color: TEXT }}>Pending Plan Requests</h3>
+      {pending.map((p) => (
+        <PlanApprovalRow key={p.id} plan={p} onApprove={handleApprove} onReject={handleReject} />
+      ))}
+    </div>
+  );
+}
+
+function PlanApprovalRow({ plan, onApprove, onReject }) {
+  const [price, setPrice] = useState(40);
+  return (
+    <div className="flex items-center gap-2 py-2 border-t text-sm" style={{ borderColor: BORDER }}>
+      <div className="flex-1" style={{ color: TEXT }}>
+        {plan.riders?.name || "Rider"} — {plan.rides_per_workday}/day, {plan.workdays.join(",")}
+      </div>
+      <input type="number" value={price} onChange={(e) => setPrice(Number(e.target.value))}
+        className="border rounded p-1 w-16 text-sm" />
+      <button onClick={() => onApprove(plan.id, price)} className="px-2 py-1 rounded text-xs text-white" style={{ background: "#4ADE80" }}>Approve</button>
+      <button onClick={() => onReject(plan.id)} className="px-2 py-1 rounded text-xs text-white" style={{ background: "#FF6B6B" }}>Reject</button>
+    </div>
+  );
+}
 function daysUntil(ts) {
   if (!ts) return null;
   return Math.ceil((ts - Date.now()) / (1000 * 60 * 60 * 24));
