@@ -12,7 +12,7 @@ import {
 signUpDriver, loginDriver, signOut, updateDriverProfile,
 updateRide, subscribeToRide, subscribeToNextPendingRide, subscribeToDriverRides, resetPassword,
 sendMagicLinkDriver, completeMagicLinkSignInDriver, completeDriverMagicLinkSignup,
-updateDriverLocation,
+updateDriverLocation, setDriverOnlineStatus,
 } from "../../lib/supabase-db";
 export const dynamic = "force-dynamic";
 const PICKUP = { x: 78, y: 24 };
@@ -43,6 +43,7 @@ function DriverAuthScreen({ onAuthed }) {
   const [linkSent, setLinkSent] = useState(false);
   const [pending, setPending] = useState(null);
   const [showHelp, setShowHelp] = useState(false);
+
   const handleSendMagicLink = async () => {
     setError("");
     const emailPattern = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
@@ -61,22 +62,8 @@ function DriverAuthScreen({ onAuthed }) {
   };
 
   useEffect(() => {
-  (async () => {
-    try {
-      const magicResult = await completeMagicLinkSignInDriver();
-      if (magicResult) {
-        if (magicResult.needsVehicleInfo) {
-          setPending({ ...magicResult, source: "magic" });
-          setName(magicResult.name || "");
-        } else {
-          onAuthed(magicResult);
-        }
-      }
-    } catch (err) {
-      setError(err.message?.replace("Firebase: ", "") || "Sign-in failed.");
-    }
-  })();
-}, []);
+    (async () => {
+      try {
         const magicResult = await completeMagicLinkSignInDriver();
         if (magicResult) {
           if (magicResult.needsVehicleInfo) {
@@ -100,10 +87,10 @@ function DriverAuthScreen({ onAuthed }) {
     if (!agreed) { setError("You must agree to the terms to continue."); return; }
     setBusy(true);
     try {
-    const driver = await completeDriverMagicLinkSignup(pending.uid, { name, email: pending.email, carModel, plate, vehicleType });
+      const driver = await completeDriverMagicLinkSignup(pending.uid, { name, email: pending.email, carModel, plate, vehicleType });
       onAuthed(driver);
     } catch (err) {
-    setError(err.message?.replace("Firebase: ", "") || "Something went wrong.");
+      setError(err.message?.replace("Firebase: ", "") || "Something went wrong.");
     }
     setBusy(false);
   };
@@ -174,25 +161,24 @@ function DriverAuthScreen({ onAuthed }) {
         <h1 className="text-3xl font-semibold tracking-tight" style={{ color: "#F5F5F0" }}>Welcome, driver</h1>
         <p className="mt-1 text-sm" style={{ color: "#7A7F8A" }}>Sign in to go online.</p>
       </div>
-       {error && <p className="text-sm" style={{ color: "#FF6B6B" }}>{error}</p>}
-        <button type="button" onClick={handleSendMagicLink} disabled={busy}
-          className="w-full py-3.5 rounded-xl font-medium text-base mt-1 transition active:scale-[0.98]"
-          style={{ background: ACCENT, color: "#111318" }}>
-          </button>
-        <button type="button" onClick={() => setShowHelp((s) => !s)}
-          className="mt-6 text-sm text-center font-medium" style={{ color: ACCENT }}>
-          Trouble signing in?
-        </button>
-        {showHelp && (
-          <div className="mt-3 rounded-xl p-3 text-xs leading-relaxed" style={{ background: "#1D2028", color: "#B9BBC2", border: "1px solid #2B2F3A" }}>
-            <p className="mb-1.5">• Use the same email every time you sign in — sign-ins aren't shared across different emails.</p>
-            <p>• Open the sign-in link on this same device to finish signing in.</p>
-          </div>
-        )}
-      </div>
+      {error && <p className="text-sm" style={{ color: "#FF6B6B" }}>{error}</p>}
+      <button type="button" onClick={handleSendMagicLink} disabled={busy}
+        className="w-full py-3.5 rounded-xl font-medium text-base mt-1 transition active:scale-[0.98]"
+        style={{ background: ACCENT, color: "#111318" }}>
+        {busy ? "One sec…" : "Encompass Rideshare"}
+      </button>
+      <button type="button" onClick={() => setShowHelp((s) => !s)}
+        className="mt-6 text-sm text-center font-medium" style={{ color: ACCENT }}>
+        Trouble signing in?
+      </button>
+      {showHelp && (
+        <div className="mt-3 rounded-xl p-3 text-xs leading-relaxed" style={{ background: "#1D2028", color: "#B9BBC2", border: "1px solid #2B2F3A" }}>
+          <p className="mb-1.5">• Use the same email every time you sign in — sign-ins aren't shared across different emails.</p>
+          <p>• Open the sign-in link on this same device to finish signing in.</p>
+        </div>
+      )}
     </div>
   );
-}
 }
 
 // ---------- Safety Toolkit ----------
@@ -786,7 +772,6 @@ function ProfileScreen({ driver, onBack, onLogout }) {
   );
 }
 
-// ---------- Root ----------
 // ---------- Waiting room gate: catches any account missing vehicle info ----------
 function VehicleInfoGateScreen({ driver, onComplete }) {
   const [carModel, setCarModel] = useState("");
