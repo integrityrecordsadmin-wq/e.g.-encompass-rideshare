@@ -2,6 +2,7 @@
 import { useState, useEffect } from "react";
 import { Car, User, DollarSign, Search, CheckCircle2, CircleDot, Star, AlertTriangle, X, Megaphone } from "lucide-react";
 import { ACCENT, AMBER, BG, CARD, BORDER, MUTED, TEXT } from "../../lib/tokens";
+import { supabase } from "../../lib/supabase";
 import {
   subscribeToAllRides, subscribeToDrivers, subscribeToRiders,
   scheduleVerificationCall, reviewDriverDocuments, updateDriverProfile, loginAdmin,
@@ -386,6 +387,61 @@ function AnnouncementsPanel() {
   );
 }
 
+function PasswordRecoveryScreen({ onDone }) {
+  const [newPassword, setNewPassword] = useState("");
+  const [confirmPassword, setConfirmPassword] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [success, setSuccess] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setError("");
+    if (newPassword.length < 8) { setError("Password must be at least 8 characters."); return; }
+    if (newPassword !== confirmPassword) { setError("Passwords don't match."); return; }
+    setBusy(true);
+    try {
+      const { error } = await supabase.auth.updateUser({ password: newPassword });
+      if (error) throw error;
+      setSuccess(true);
+    } catch (err) {
+      setError(err.message?.replace("Firebase: ", "") || "Couldn't update password.");
+    }
+    setBusy(false);
+  };
+
+  if (success) {
+    return (
+      <div className="w-full min-h-screen flex items-center justify-center px-8" style={{ background: BG }}>
+        <div className="w-full max-w-sm text-center space-y-3">
+          <h1 className="text-xl font-semibold" style={{ color: TEXT }}>Password updated</h1>
+          <p className="text-sm" style={{ color: MUTED }}>You can now log in with your new password.</p>
+          <button onClick={onDone} className="w-full py-3 rounded-xl font-medium text-sm mt-2" style={{ background: ACCENT, color: "#111318" }}>
+            Go to login
+          </button>
+        </div>
+      </div>
+    );
+  }
+
+  return (
+    <div className="w-full min-h-screen flex items-center justify-center px-8" style={{ background: BG }}>
+      <form onSubmit={submit} className="w-full max-w-sm space-y-3">
+        <h1 className="text-xl font-semibold mb-1" style={{ color: TEXT }}>Set a new password</h1>
+        <p className="text-sm mb-3" style={{ color: MUTED }}>Choose a new password for your admin account.</p>
+        <input value={newPassword} onChange={(e) => setNewPassword(e.target.value)} placeholder="New password" type="password"
+          className="w-full px-4 py-3 rounded-xl text-sm outline-none" style={{ background: CARD, color: TEXT, border: `1px solid ${BORDER}` }} />
+        <input value={confirmPassword} onChange={(e) => setConfirmPassword(e.target.value)} placeholder="Confirm new password" type="password"
+          className="w-full px-4 py-3 rounded-xl text-sm outline-none" style={{ background: CARD, color: TEXT, border: `1px solid ${BORDER}` }} />
+        {error && <p className="text-sm" style={{ color: "#FF6B6B" }}>{error}</p>}
+        <button type="submit" disabled={busy} className="w-full py-3 rounded-xl font-medium text-sm" style={{ background: ACCENT, color: "#111318" }}>
+          {busy ? "One sec…" : "Update password"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
 function AdminAuthScreen({ onAuthed }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -616,6 +672,16 @@ function AdminDashboard() {
 
 export default function AdminPage() {
   const [admin, setAdmin] = useState(null);
+  const [isRecovery, setIsRecovery] = useState(false);
+
+  useEffect(() => {
+    const { data: listener } = supabase.auth.onAuthStateChange((event) => {
+      if (event === "PASSWORD_RECOVERY") setIsRecovery(true);
+    });
+    return () => listener?.subscription?.unsubscribe();
+  }, []);
+
+  if (isRecovery) return <PasswordRecoveryScreen onDone={() => setIsRecovery(false)} />;
   if (!admin) return <AdminAuthScreen onAuthed={setAdmin} />;
   return <AdminDashboard />;
 }
