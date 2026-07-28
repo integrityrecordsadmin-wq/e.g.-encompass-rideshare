@@ -1,4 +1,39 @@
 "use client";
+useEffect(() => {
+  let wakeLock = null;
+ const requestWakeLock = async () => {
+    try {
+      if ("wakeLock" in navigator) {
+        wakeLock = await navigator.wakeLock.request("screen");
+      }
+    } catch (err) {
+      console.log("Wake lock failed:", err.message);
+    }
+  };
+
+  const releaseWakeLock = async () => {
+    if (wakeLock) {
+      try { await wakeLock.release(); } catch (e) {}
+      wakeLock = null;
+    }
+  };
+
+  if (online) {
+    requestWakeLock();
+  }
+
+  const handleVisibilityChange = () => {
+    if (online && document.visibilityState === "visible") {
+      requestWakeLock();
+    }
+  };
+  document.addEventListener("visibilitychange", handleVisibilityChange);
+
+  return () => {
+    document.removeEventListener("visibilitychange", handleVisibilityChange);
+    releaseWakeLock();
+  };
+}, [online]);
 import { useState, useEffect, useRef } from "react";
 import {
   Navigation, User, Car, Clock, Check, X, Star, Power, DollarSign, MapPin, Shield, Mic, ChevronLeft, MessageCircle, BarChart3,
