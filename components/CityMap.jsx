@@ -11,7 +11,7 @@ export default function CityMap({ driverPos, markerColor = AMBER, showRoute, rou
     <svg viewBox="0 0 100 100" className="w-full h-full" preserveAspectRatio="xMidYMid slice">
       <defs>
         <pattern id="grid" width="10" height="10" patternUnits="userSpaceOnUse">
-          <path d="M 10 0 L 0 0 0 10" fill="none" stroke="#E4E2D9" strokeWidth="0.4" />
+          <path d="M 10 0 L 0 0 0 10" fill="none" stroke="#B8B5A8" strokeWidth="0.5" />
         </pattern>
         <radialGradient id="glow" cx="50%" cy="50%" r="50%">
           <stop offset="0%" stopColor={ACCENT} stopOpacity="0.35" />
@@ -20,8 +20,8 @@ export default function CityMap({ driverPos, markerColor = AMBER, showRoute, rou
       </defs>
       <rect width="100" height="100" fill="#FFFFFF" />
       <rect width="100" height="100" fill="url(#grid)" />
-      <line x1="0" y1="45" x2="100" y2="45" stroke="#D8D6CE" strokeWidth="1.4" />
-      <line x1="60" y1="0" x2="60" y2="100" stroke="#D8D6CE" strokeWidth="1.4" />
+      <line x1="0" y1="45" x2="100" y2="45" stroke="#8A8776" strokeWidth="1.6" />
+      <line x1="60" y1="0" x2="60" y2="100" stroke="#8A8776" strokeWidth="1.6" />
 
       {showRoute && routePath && (
         <path
