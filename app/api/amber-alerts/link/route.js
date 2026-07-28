@@ -1,37 +1,36 @@
-import { NextResponse } from 'next/server';
-import Stripe from 'stripe';
 
-const stripe = new Stripe(process.env.STRIPE_SECRET_KEY);
+// Pulls real AMBER Alerts (issued by law enforcement as "Child Abduction
+// Emergency" messages, relayed through the National Weather Service into
+// the federal IPAWS alert system) for Texas and its neighboring states.
+// No API key required — this is a free, official government feed.
 
-export async function POST(request) {
+const STATES = ["TX", "OK", "AR", "LA", "NM"];
+
+export async function GET() {
   try {
-    const { accountId } = await request.json();
-
-    if (!accountId) {
-      return NextResponse.json(
-        { error: { message: 'accountId is required' } },
-        { status: 400 }
-      );
-    }
-
-    const accountLink = await stripe.v2.core.accountLinks.create({
-      account: accountId,
-      use_case: {
-        type: 'account_onboarding',
-        account_onboarding: {
-          configurations: ['recipient'],
-          refresh_url: `${process.env.NEXT_PUBLIC_DOMAIN}/driver/payout-setup`,
-          return_url: `${process.env.NEXT_PUBLIC_DOMAIN}/driver?payoutSetup=complete`,
+    const res = await fetch(
+      `https://api.weather.gov/alerts/active?area=${STATES.join(",")}`,
+      {
+        headers: {
+          "User-Agent": "EncompassRideshare (support@encompassrs.com)",
+          Accept: "application/geo+json",
         },
-      },
-    });
-
-    return NextResponse.json({ url: accountLink.url });
-  } catch (error) {
-    console.error('Stripe account link creation failed:', error.message);
-    return NextResponse.json(
-      { error: { message: error.message } },
-      { status: 500 }
+        next: { revalidate: 60 },
+      }
     );
+    if (!res.ok) return Response.json({ alerts: [] });
+    const data = await res.json();
+    const alerts = (data.features || [])
+      .filter((f) => f.properties?.event === "Child Abduction Emergency")
+      .map((f) => ({
+        id: f.id,
+        headline: f.properties.headline,
+        description: f.properties.description,
+        areaDesc: f.properties.areaDesc,
+        sent: f.properties.sent,
+      }));
+    return Response.json({ alerts });
+  } catch (e) {
+    return Response.json({ alerts: [] });
   }
 }
