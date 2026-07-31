@@ -1,3 +1,4 @@
+
 "use client";
 import { useState, useEffect, useRef } from "react";
 import {
@@ -13,6 +14,7 @@ import {
   signUpRider, loginRider, signOut, updateRiderProfile,
   createRide, subscribeToRide, resetPassword, createFamilyRideRoom, getOnlineDriverTokens,
   startGoogleSignIn, completeGoogleSignInRider, sendMagicLinkRider, completeMagicLinkSignInRider,
+  getRiderFlatratePlan,
 } from "../../lib/supabase-db";
 const HOME = { x: 20, y: 78 };
 const DEST = { x: 82, y: 22 };
@@ -162,6 +164,11 @@ function SafetyToolkitScreen({ user, onBack, onUpdateUser }) {
     </div>
   );
 }
+
+// NOTE: MyPlanScreen / PlanStatusCard / NoPlanCard reference getRiderFlatratePlan (now
+// imported above) and requestFlatratePlan (still missing — that function doesn't exist
+// yet in lib/supabase-db.js). Tapping "Request Plan" will still error until that's added.
+// Flagged separately — out of scope for the round-trip fix.
 function MyPlanScreen({ user, onBack }) {
   const [plan, setPlan] = useState(null);
   const [loading, setLoading] = useState(true);
@@ -225,8 +232,12 @@ function NoPlanCard({ userId, onRequested }) {
   const days = [['sun','Sun'],['mon','Mon'],['tue','Tue'],['wed','Wed'],['thu','Thu'],['fri','Fri'],['sat','Sat']];
 
   async function submit() {
-    await requestFlatratePlan(userId, ridesPerDay, workdays);
-    setSubmitted(true);
+    try {
+      await requestFlatratePlan(userId, ridesPerDay, workdays);
+      setSubmitted(true);
+    } catch (err) {
+      alert("Couldn't send your plan request yet — this feature isn't fully set up. (" + (err.message || "unknown error") + ")");
+    }
   }
 
   if (submitted) {
@@ -262,7 +273,7 @@ function NoPlanCard({ userId, onRequested }) {
       </button>
     </div>
   );
-          }
+}
 // ---------- Home ----------
 function InstallAppButton() {
   const [deferredPrompt, setDeferredPrompt] = useState(null);
@@ -346,14 +357,11 @@ function HomeScreen({ user, onRequest, onLogout, onSafety, onMyPlan }) {
 }
 
 // ---------- Destination entry ----------
-function DestinationScreen({ onBack, onConfirm }) {
+function DestinationScreen({ onBack, onConfirm, isReturnTrip }) {
   const [dest, setDest] = useState("");
   const [vehicle, setVehicle] = useState("standard");
   const [isFamilyRide, setIsFamilyRide] = useState(false);
   const [familyConsent, setFamilyConsent] = useState(false);
-const [isRoundTrip, setIsRoundTrip] = useState(false);
-const [roundTripType, setRoundTripType] = useState('same_driver');
-const [returnTime, setReturnTime] = useState('');
   const baseTrip = dest.trim() ? seededTrip(dest.trim()) : null;
   const baseFare = dest.trim() ? fareFor(dest.trim()).fare : 0;
   const selectedVehicle = VEHICLE_TYPES.find((v) => v.id === vehicle);
@@ -366,7 +374,7 @@ const [returnTime, setReturnTime] = useState('');
         <button onClick={onBack} aria-label="Back" className="w-9 h-9 rounded-full flex items-center justify-center" style={{ background: "#EDEBE2" }}>
           <ChevronLeft size={18} color="#111318" />
         </button>
-        <h2 className="text-base font-semibold" style={{ color: "#111318" }}>Set destination</h2>
+        <h2 className="text-base font-semibold" style={{ color: "#111318" }}>{isReturnTrip ? "Book your return ride" : "Set destination"}</h2>
       </div>
       <div className="px-4 mt-2 space-y-3 flex-1 overflow-y-auto">
         <div className="flex items-center gap-3 px-4 py-3 rounded-xl" style={{ background: "#EDEBE2" }}>
@@ -379,30 +387,6 @@ const [returnTime, setReturnTime] = useState('');
             name="ride-destination-field" autoComplete="off" autoCorrect="off" spellCheck="false"
             className="text-sm outline-none w-full bg-transparent" style={{ color: "#111318" }} />
         </div>
-<label className="flex items-center gap-2 mt-3">
-  <input type="checkbox" checked={isRoundTrip} onChange={(e) => setIsRoundTrip(e.target.checked)} />
-  <span className="text-sm" style={{ color: "#111318" }}>Round trip?</span>
-</label>
-
-{isRoundTrip && (
-  <div className="mt-2 space-y-2">
-    <label className="flex items-center gap-2 text-sm">
-      <input type="radio" checked={roundTripType === 'same_driver'} onChange={() => setRoundTripType('same_driver')} />
-      Same driver waits & brings me back
-    </label>
-    <label className="flex items-center gap-2 text-sm">
-      <input type="radio" checked={roundTripType === 'separate_rides'} onChange={() => setRoundTripType('separate_rides')} />
-      Book as two separate rides
-    </label>
-    <input
-      type="datetime-local"
-      value={returnTime}
-      onChange={(e) => setReturnTime(e.target.value)}
-      className="text-sm outline-none w-full bg-transparent border rounded p-2"
-      style={{ color: "#111318" }}
-    />
-  </div>
-)}
         {dest.trim() && (
           <>
             <div>
@@ -468,7 +452,7 @@ const [returnTime, setReturnTime] = useState('');
         )}
       </div>
       <div className="p-4">
-        <button disabled={!canConfirm} onClick={() => onConfirm(dest.trim(), vehicle, finalFare, isFamilyRide, isRoundTrip, roundTripType, returnTime)}
+        <button disabled={!canConfirm} onClick={() => onConfirm(dest.trim(), vehicle, finalFare, isFamilyRide)}
           className="w-full py-3.5 rounded-xl font-medium text-base disabled:opacity-40" style={{ background: ACCENT, color: "#111318" }}>
           {dest.trim() ? `Confirm ${selectedVehicle.name} • $${finalFare.toFixed(2)}` : "Confirm destination"}
         </button>
@@ -706,7 +690,7 @@ function TrackingScreen({ rideId, destination, onComplete }) {
 }
 
 // ---------- Ride complete ----------
-function CompleteScreen({ destination, driverName, onDone }) {
+function CompleteScreen({ destination, driverName, onDone, onRequestReturn }) {
   return (
     <div className="w-full h-full flex flex-col items-center justify-center px-8" style={{ background: "#111318" }}>
       <div className="w-16 h-16 rounded-full flex items-center justify-center mb-6" style={{ background: ACCENT }}>
@@ -714,7 +698,14 @@ function CompleteScreen({ destination, driverName, onDone }) {
       </div>
       <h2 className="text-xl font-semibold" style={{ color: "#F5F5F0" }}>Ride complete</h2>
       <p className="text-sm mt-1 mb-8 text-center" style={{ color: "#7A7F8A" }}>You arrived at {destination}{driverName ? ` with ${driverName}` : ""}.</p>
-      <button onClick={onDone} className="w-full py-3.5 rounded-xl font-medium text-base" style={{ background: ACCENT, color: "#111318" }}>Done</button>
+      <button onClick={onRequestReturn} className="w-full py-3.5 rounded-xl font-medium text-base mb-3"
+        style={{ background: ACCENT, color: "#111318" }}>
+        Need a ride back? Book return trip
+      </button>
+      <button onClick={onDone} className="w-full py-3.5 rounded-xl font-medium text-base"
+        style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }}>
+        Done
+      </button>
     </div>
   );
 }
@@ -726,71 +717,52 @@ export default function RiderApp() {
   const [destination, setDestination] = useState("");
   const [rideId, setRideId] = useState(null);
   const [finalDriverName, setFinalDriverName] = useState("");
+  const [isReturnTrip, setIsReturnTrip] = useState(false);
 
-  const handleConfirmDestination = async (dest, vehicleType, finalFare, isFamilyRide, isRoundTrip, roundTripType, returnTime) => {
-  setDestination(dest);
-  const trip = seededTrip(dest);
+  const handleConfirmDestination = async (dest, vehicleType, finalFare, isFamilyRide) => {
+    setDestination(dest);
+    const trip = seededTrip(dest);
 
-  const rideData = {
-    riderName: user.name, riderUid: user.uid,
-    destination: dest, fare: finalFare, miles: trip.miles, minutes: trip.minutes,
-    vehicleType,
-    isFamilyRide: !!isFamilyRide,
-    riderRecording: !!user.audioRecordingEnabled,
-  };
+    const rideData = {
+      riderName: user.name, riderUid: user.uid,
+      destination: dest, fare: finalFare, miles: trip.miles, minutes: trip.minutes,
+      vehicleType,
+      isFamilyRide: !!isFamilyRide,
+      riderRecording: !!user.audioRecordingEnabled,
+    };
 
-  let id;
-  if (isRoundTrip) {
-    const result = await createRoundTripRide({ ...rideData, roundTripType, returnTime });
-    id = result.outbound ? result.outbound.id : result.id;
-  } else {
-    id = await createRide(rideData);
-  }
+    const id = await createRide(rideData);
     if (isFamilyRide) {
       try { await createFamilyRideRoom(id); } catch (e) { /* room creation failed — trip still proceeds without video */ }
     }
-    try {
-      const tokens = await getOnlineDriverTokens(vehicleType);
-      alert("Vehicle type: " + vehicleType + " | Tokens found: " + tokens.length + (tokens.length ? " | First: " + tokens[0].slice(0, 15) + "…" : ""));
-      const results = await Promise.all(tokens.map((token) =>
-        sendPushNotification({
-          token,
-          title: "New ride request",
-          body: `${user.name} needs a ride to ${dest} — $${finalFare.toFixed(2)}`,
-          url: "/driver",
-        })
-      ));
-      alert("Push result: " + JSON.stringify(results));
-    } catch (e) {
-      alert("PUSH ERROR: " + e.message);
-    }
     setRideId(id);
+    setIsReturnTrip(false);
     setScreen("finding");
   };
-const handleAccepted = (ride) => { setFinalDriverName(ride.driverName || ""); setScreen("tracking"); };
-    const handleComplete = (ride) => { setFinalDriverName(ride.driverName || ""); setScreen("complete"); };
 
-    if (!user) {
-      return (
-        <div className="w-full h-screen max-w-sm mx-auto overflow-hidden sm:rounded-[2rem] sm:h-[700px] sm:my-8 relative"
-          style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.4)" }}>
-          <AuthScreen onAuthed={(u) => { setUser(u); setScreen("home"); }} />
-        </div>
-      );
-    }
+  const handleAccepted = (ride) => { setFinalDriverName(ride.driverName || ""); setScreen("tracking"); };
+  const handleComplete = (ride) => { setFinalDriverName(ride.driverName || ""); setScreen("complete"); };
+  const handleRequestReturn = () => { setIsReturnTrip(true); setScreen("destination"); };
 
+  if (!user) {
     return (
       <div className="w-full h-screen max-w-sm mx-auto overflow-hidden sm:rounded-[2rem] sm:h-[700px] sm:my-8 relative"
         style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.4)" }}>
-        {screen === "home" && <HomeScreen user={user} onRequest={() => setScreen("destination")} onLogout={async () => { await signOut(); setUser(null); }} onSafety={() => setScreen("safety")} onMyPlan={() => setScreen("myplan")} />}
-        {screen === "myplan" && <MyPlanScreen user={user} onBack={() => setScreen("home")} />}
-        {screen === "safety" && <SafetyToolkitScreen user={user} onBack={() => setScreen("home")} onUpdateUser={setUser} />}
-        {screen === "destination" && <DestinationScreen onBack={() => setScreen("home")} onConfirm={handleConfirmDestination} />}
-        {screen === "finding" && <FindingDriverScreen rideId={rideId} destination={destination} onAccepted={handleAccepted} onCancelled={() => setScreen("home")} />}
-        {screen === "tracking" && <TrackingScreen rideId={rideId} destination={destination} onComplete={handleComplete} />}
-        {screen === "complete" && <CompleteScreen destination={destination} driverName={finalDriverName} onDone={() => setScreen("home")} />}
+        <AuthScreen onAuthed={(u) => { setUser(u); setScreen("home"); }} />
       </div>
     );
-  
-  
+  }
+
+  return (
+    <div className="w-full h-screen max-w-sm mx-auto overflow-hidden sm:rounded-[2rem] sm:h-[700px] sm:my-8 relative"
+      style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.4)" }}>
+      {screen === "home" && <HomeScreen user={user} onRequest={() => { setIsReturnTrip(false); setScreen("destination"); }} onLogout={async () => { await signOut(); setUser(null); }} onSafety={() => setScreen("safety")} onMyPlan={() => setScreen("myplan")} />}
+      {screen === "myplan" && <MyPlanScreen user={user} onBack={() => setScreen("home")} />}
+      {screen === "safety" && <SafetyToolkitScreen user={user} onBack={() => setScreen("home")} onUpdateUser={setUser} />}
+      {screen === "destination" && <DestinationScreen onBack={() => setScreen(isReturnTrip ? "complete" : "home")} onConfirm={handleConfirmDestination} isReturnTrip={isReturnTrip} />}
+      {screen === "finding" && <FindingDriverScreen rideId={rideId} destination={destination} onAccepted={handleAccepted} onCancelled={() => setScreen("home")} />}
+      {screen === "tracking" && <TrackingScreen rideId={rideId} destination={destination} onComplete={handleComplete} />}
+      {screen === "complete" && <CompleteScreen destination={destination} driverName={finalDriverName} onDone={() => setScreen("home")} onRequestReturn={handleRequestReturn} />}
+    </div>
+  );
 }
