@@ -284,6 +284,12 @@ function playChime() {
 
 function DriverHomeScreen({ driver, online, setOnline, onProfile, onIncomingRide, onSafety, onEarnings }) {
   useEffect(() => {
+    if (!online) return;
+    const unsub = subscribeToNextPendingRide(driver.vehicleType, (ride) => onIncomingRide(ride));
+    return unsub;
+  }, [online]);
+
+  useEffect(() => {
     let wakeLock = null;
     const requestWakeLock = async () => {
       try {
@@ -317,11 +323,6 @@ function DriverHomeScreen({ driver, online, setOnline, onProfile, onIncomingRide
       document.removeEventListener("visibilitychange", handleVisibilityChange);
       releaseWakeLock();
     };
-  }, [online]);  
-  useEffect(() => {
-    if (!online) return;
-    const unsub = subscribeToNextPendingRide(driver.vehicleType, (ride) => onIncomingRide(ride));
-    return unsub;
   }, [online]);
 
   const vehicleInfo = VEHICLE_TYPES.find((v) => v.id === (driver.vehicleType || "standard"));
@@ -506,13 +507,7 @@ function TripScreen({ ride, driver, onComplete }) {
   const toDropoffPath = [PICKUP, { x: PICKUP.x, y: DROPOFF.y }, DROPOFF];
   const activePath = phase === "toPickup" ? toPickupPath : toDropoffPath;
   const duration = phase === "toPickup" ? 4000 : 5500;
-  useEffect(() => {
-  let wakeLock = null;
- const requestWakeLock = async () => {
-    ...
-  };
-  ...
-}, [online]);
+
   useEffect(() => {
     if (phase === "arrivedPickup" || phase === "arrivedDropoff") return;
     startRef.current = null;
