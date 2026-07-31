@@ -1,28 +1,5 @@
 "use client";
-useEffect(() => {
-  let wakeLock = null;
- const requestWakeLock = async () => {
-    try {
-      if ("wakeLock" in navigator) {
-        wakeLock = await navigator.wakeLock.request("screen");
-      }
-    } catch (err) {
-      console.log("Wake lock failed:", err.message);
-    }
-  };
-
-  const releaseWakeLock = async () => {
-    if (wakeLock) {
-      try { await wakeLock.release(); } catch (e) {}
-      wakeLock = null;
-    }
-  };
-
-  if (online) {
-    requestWakeLock();
-  }
-
-  const handleVisibilityChange = () => {
+const handleVisibilityChange = () => {
     if (online && document.visibilityState === "visible") {
       requestWakeLock();
     }
@@ -506,7 +483,13 @@ function TripScreen({ ride, driver, onComplete }) {
   const toDropoffPath = [PICKUP, { x: PICKUP.x, y: DROPOFF.y }, DROPOFF];
   const activePath = phase === "toPickup" ? toPickupPath : toDropoffPath;
   const duration = phase === "toPickup" ? 4000 : 5500;
-
+  useEffect(() => {
+  let wakeLock = null;
+ const requestWakeLock = async () => {
+    ...
+  };
+  ...
+}, [online]);
   useEffect(() => {
     if (phase === "arrivedPickup" || phase === "arrivedDropoff") return;
     startRef.current = null;
