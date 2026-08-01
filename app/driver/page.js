@@ -15,20 +15,7 @@ sendMagicLinkDriver, completeMagicLinkSignInDriver, completeDriverMagicLinkSignu
 updateDriverLocation, setDriverOnlineStatus,
 } from "../../lib/supabase-db";
 export const dynamic = "force-dynamic";
-const PICKUP = { x: 78, y: 24 };
-const DROPOFF = { x: 22, y: 76 };
-const DRIVER_HOME = { x: 50, y: 50 };
 const QUICK_REPLIES_DRIVER = ["I'm here", "2 min away", "Running a bit late", "On my way"];
-
-function lerp(a, b, t) { return a + (b - a) * t; }
-function pointAt(path, t) {
-  const segCount = path.length - 1;
-  const scaled = t * segCount;
-  const i = Math.min(Math.floor(scaled), segCount - 1);
-  const localT = scaled - i;
-  const a = path[i], b = path[i + 1];
-  return { x: lerp(a.x, b.x, localT), y: lerp(a.y, b.y, localT) };
-}
 
 // ---------- Auth ----------
 function DriverAuthScreen({ onAuthed }) {
@@ -325,6 +312,18 @@ function DriverHomeScreen({ driver, online, setOnline, onProfile, onIncomingRide
     };
   }, [online]);
 
+  const [myPos, setMyPos] = useState(null);
+
+  useEffect(() => {
+    if (!online || !("geolocation" in navigator)) return;
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => setMyPos({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      (err) => console.log("Location watch failed:", err.message),
+      { enableHighAccuracy: true, maximumAge: 15000 }
+    );
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [online]);
+
   const vehicleInfo = VEHICLE_TYPES.find((v) => v.id === (driver.vehicleType || "standard"));
 
   const handleToggleOnline = async () => {
@@ -344,7 +343,7 @@ function DriverHomeScreen({ driver, online, setOnline, onProfile, onIncomingRide
 
   return (
     <div className="relative w-full h-full">
-      <div className="absolute inset-0"><CityMap driverPos={online ? DRIVER_HOME : null} showRoute={false} /></div>
+      <div className="absolute inset-0"><CityMap driverPos={online ? myPos : null} showRoute={false} /></div>
       <div className="absolute top-0 left-0 right-0 p-4 flex items-center justify-between">
         <button onClick={onProfile} aria-label="Account" className="w-10 h-10 rounded-full flex items-center justify-center"
           style={{ background: "rgba(17,19,24,0.85)", border: "1px solid #2B2F3A" }}>
@@ -435,7 +434,7 @@ function IncomingRequestScreen({ ride, onAccept, onDecline }) {
     <div className="relative w-full h-full">
       <div className="absolute inset-0 z-20 pointer-events-none rounded-[2rem] animate-pulse"
         style={{ boxShadow: `inset 0 0 0 4px ${ACCENT}` }} />
-      <CityMap driverPos={PICKUP} markerColor={ACCENT} showRoute={false} pins={[{ ...DROPOFF, color: AMBER }]} />
+      <CityMap pickupPos={ride.pickup_location} dropoffPos={ride.dropoff_location} markerColor={ACCENT} showRoute={true} />
       <div className="absolute inset-0 flex flex-col justify-end">
         <div className="rounded-t-3xl p-5 pb-8" style={{ background: "#F5F5F0" }}>
           <div className="flex items-center justify-between mb-4">
@@ -450,14 +449,14 @@ function IncomingRequestScreen({ ride, onAccept, onDecline }) {
               <User size={18} color="#111318" />
             </div>
             <div>
-              <p className="font-semibold text-sm" style={{ color: "#111318" }}>{ride.riderName}</p>
+              <p className="font-semibold text-sm" style={{ color: "#111318" }}>{ride.rider_name}</p>
               <p className="text-xs" style={{ color: "#7A7F8A" }}>{ride.miles} mi · ~{ride.minutes} min</p>
             </div>
             <div className="ml-auto text-right">
               <p className="font-semibold text-sm" style={{ color: "#111318" }}>${ride.fare.toFixed(2)}</p>
             </div>
           </div>
-          {ride.isFamilyRide && (
+          {ride.is_family_ride && (
             <div className="mb-3 px-3 py-2 rounded-lg flex items-center gap-2" style={{ background: "#FCE7EF" }}>
               <span className="text-xs font-semibold" style={{ color: "#E8547C" }}>❤ Family Ride — live video required</span>
             </div>
@@ -471,9 +470,9 @@ function IncomingRequestScreen({ ride, onAccept, onDecline }) {
             </div>
           </div>
           <div className="mt-3 px-3 py-2 rounded-lg flex items-center gap-2"
-            style={{ background: ride.paymentMethod === "cash" ? "#FEF3E2" : "#EDEBE2" }}>
-            <span className="text-xs font-semibold" style={{ color: ride.paymentMethod === "cash" ? "#B8860B" : "#111318" }}>
-              {ride.paymentMethod === "cash" ? "💵 Rider is paying cash — collect at drop-off" : "💳 Card on file"}
+            style={{ background: ride.payment_method === "cash" ? "#FEF3E2" : "#EDEBE2" }}>
+            <span className="text-xs font-semibold" style={{ color: ride.payment_method === "cash" ? "#B8860B" : "#111318" }}>
+              {ride.payment_method === "cash" ? "💵 Rider is paying cash — collect at drop-off" : "💳 Card on file"}
             </span>
           </div>
           <div className="flex gap-3 mt-5">
@@ -497,39 +496,60 @@ function IncomingRequestScreen({ ride, onAccept, onDecline }) {
 // ---------- Trip in progress ----------
 function TripScreen({ ride, driver, onComplete }) {
   const [phase, setPhase] = useState("toPickup");
-  const [t, setT] = useState(0);
+  const [driverPos, setDriverPos] = useState(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [seenMsgCount, setSeenMsgCount] = useState((ride.messages || []).length);
   const [liveMsgCount, setLiveMsgCount] = useState((ride.messages || []).length);
-  const rafRef = useRef();
-  const startRef = useRef(null);
 
   useEffect(() => {
     const unsub = subscribeToRide(ride.id, (r) => setLiveMsgCount((r.messages || []).length));
     return unsub;
   }, [ride.id]);
 
-  const toPickupPath = [DRIVER_HOME, { x: DRIVER_HOME.x, y: PICKUP.y }, PICKUP];
-  const toDropoffPath = [PICKUP, { x: PICKUP.x, y: DROPOFF.y }, DROPOFF];
-  const activePath = phase === "toPickup" ? toPickupPath : toDropoffPath;
-  const duration = phase === "toPickup" ? 4000 : 5500;
+  // Real, live GPS — watches the driver's actual phone location for the
+  // whole trip and broadcasts it to Supabase so the rider (and Family Hub)
+  // see the real position, not a simulated one.
+  useEffect(() => {
+    if (!("geolocation" in navigator)) return;
+    const watchId = navigator.geolocation.watchPosition(
+      (pos) => {
+        const next = { lat: pos.coords.latitude, lng: pos.coords.longitude };
+        setDriverPos(next);
+        updateDriverLocation(ride.id, next.lat, next.lng).catch(() => {});
+      },
+      (err) => console.log("Location watch failed:", err.message),
+      { enableHighAccuracy: true, maximumAge: 5000 }
+    );
+    return () => navigator.geolocation.clearWatch(watchId);
+  }, [ride.id]);
+
+  const pickupPos = ride.pickup_location;
+  const dropoffPos = ride.dropoff_location;
+
+  // Haversine distance in miles — used to detect real arrival at pickup/drop-off.
+  const distanceMiles = (a, b) => {
+    if (!a || !b) return Infinity;
+    const R = 3958.8;
+    const dLat = ((b.lat - a.lat) * Math.PI) / 180;
+    const dLng = ((b.lng - a.lng) * Math.PI) / 180;
+    const lat1 = (a.lat * Math.PI) / 180;
+    const lat2 = (b.lat * Math.PI) / 180;
+    const h = Math.sin(dLat / 2) ** 2 + Math.cos(lat1) * Math.cos(lat2) * Math.sin(dLng / 2) ** 2;
+    return R * 2 * Math.asin(Math.sqrt(h));
+  };
+  const ARRIVAL_THRESHOLD_MILES = 0.06; // roughly 300 feet
 
   useEffect(() => {
-    if (phase === "arrivedPickup" || phase === "arrivedDropoff") return;
-    startRef.current = null;
-    const step = (ts) => {
-      if (!startRef.current) startRef.current = ts;
-      const progress = Math.min((ts - startRef.current) / duration, 1);
-      setT(progress);
-      if (progress < 1) rafRef.current = requestAnimationFrame(step);
-      else if (phase === "toPickup") { setPhase("arrivedPickup"); updateRide(ride.id, { status: "arrived_pickup" }); }
-      else if (phase === "toDropoff") setPhase("arrivedDropoff");
-    };
-    rafRef.current = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(rafRef.current);
-  }, [phase]);
+    if (!driverPos) return;
+    if (phase === "toPickup" && distanceMiles(driverPos, pickupPos) < ARRIVAL_THRESHOLD_MILES) {
+      setPhase("arrivedPickup");
+      updateRide(ride.id, { status: "arrived_pickup" });
+    } else if (phase === "toDropoff" && distanceMiles(driverPos, dropoffPos) < ARRIVAL_THRESHOLD_MILES) {
+      setPhase("arrivedDropoff");
+    }
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [driverPos, phase]);
 
-  const markerPos = phase === "arrivedPickup" ? PICKUP : phase === "arrivedDropoff" ? DROPOFF : pointAt(activePath, t);
   const statusText = {
     toPickup: "Heading to pickup",
     arrivedPickup: "You've arrived at pickup",
@@ -540,7 +560,6 @@ function TripScreen({ ride, driver, onComplete }) {
   const startTrip = async () => {
     await updateRide(ride.id, { status: "in_progress" });
     setPhase("toDropoff");
-    setT(0);
   };
 
   const inTrip = phase === "toDropoff" || phase === "arrivedDropoff";
@@ -548,18 +567,18 @@ function TripScreen({ ride, driver, onComplete }) {
   return (
     <div className="relative w-full h-full">
       <CityMap
-        driverPos={markerPos}
+        driverPos={driverPos}
+        pickupPos={pickupPos}
+        dropoffPos={dropoffPos}
         markerColor={ACCENT}
         showRoute
-        routePath={phase === "toPickup" || phase === "arrivedPickup" ? toPickupPath : toDropoffPath}
-        pins={[{ ...(phase === "toPickup" || phase === "arrivedPickup" ? DROPOFF : PICKUP), color: "#7A7F8A" }]}
       />
 
-      {ride.isFamilyRide && inTrip && ride.familyVideoUrl && (
+      {ride.is_family_ride && inTrip && ride.family_video_url && (
         <div className="absolute top-4 right-4 w-24 h-24 rounded-2xl overflow-hidden z-10"
           style={{ border: "2px solid #E8547C", boxShadow: "0 6px 16px -4px rgba(0,0,0,0.4)" }}>
           <iframe
-            src={`${ride.familyVideoUrl}?userName=Driver`}
+            src={`${ride.family_video_url}?userName=Driver`}
             allow="camera; microphone; autoplay; display-capture"
             className="w-full h-full border-0"
           />
@@ -570,18 +589,18 @@ function TripScreen({ ride, driver, onComplete }) {
       )}
 
       <div className="absolute top-4 left-4 right-4">
-        {ride.paymentMethod === "cash" && (
+        {ride.payment_method === "cash" && (
           <div className="px-4 py-2.5 rounded-xl flex items-center gap-2 mb-2" style={{ background: "rgba(184,134,11,0.2)", border: "1px solid #B8860B" }}>
             <span className="text-xs font-semibold" style={{ color: "#F5F5F0" }}>💵 Cash trip — collect ${ride.fare?.toFixed(2)} at drop-off</span>
           </div>
         )}
-        {ride.riderRecording && (
+        {ride.rider_recording && (
           <div className="px-4 py-2.5 rounded-xl flex items-center gap-2 mb-2" style={{ background: "rgba(108,92,231,0.15)", border: `1px solid ${ACCENT}` }}>
             <Shield size={14} color={ACCENT} />
             <span className="text-xs" style={{ color: "#F5F5F0" }}>Rider may be audio recording this trip</span>
           </div>
         )}
-        {ride.isFamilyRide && (
+        {ride.is_family_ride && (
           <div className="px-4 py-2 rounded-xl flex items-center gap-2 mb-2" style={{ background: "rgba(232,84,124,0.2)", border: "1px solid #E8547C" }}>
             <span className="text-xs font-medium" style={{ color: "#F5F5F0" }}>❤ Family Ride — parent is watching live</span>
           </div>
@@ -598,7 +617,7 @@ function TripScreen({ ride, driver, onComplete }) {
             <User size={18} color="#111318" />
           </div>
           <div>
-            <p className="font-semibold text-sm" style={{ color: "#111318" }}>{ride.riderName}</p>
+            <p className="font-semibold text-sm" style={{ color: "#111318" }}>{ride.rider_name}</p>
             <p className="text-xs" style={{ color: "#7A7F8A" }}>Rider</p>
           </div>
           <div className="ml-auto text-right">
@@ -611,7 +630,7 @@ function TripScreen({ ride, driver, onComplete }) {
           </button>
         </div>
         {(phase === "toPickup" || phase === "toDropoff") && (
-          <a href={wazeNavigateUrl(phase === "toPickup" ? `Pickup for ${ride.riderName}` : ride.destination)}
+          <a href={wazeNavigateUrl(phase === "toPickup" ? `Pickup for ${ride.rider_name}` : ride.destination)}
             target="_blank" rel="noopener noreferrer"
             className="w-full mb-2.5 py-3.5 rounded-xl font-medium text-base flex items-center justify-center gap-2"
             style={{ background: "#111318", color: "#F5F5F0" }}>
@@ -637,7 +656,7 @@ function TripScreen({ ride, driver, onComplete }) {
         )}
       </div>
       {chatOpen && (
-        <ChatPanel rideId={ride.id} mySender="driver" otherName={ride.riderName} quickReplies={QUICK_REPLIES_DRIVER} onClose={() => setChatOpen(false)} />
+        <ChatPanel rideId={ride.id} mySender="driver" otherName={ride.rider_name} quickReplies={QUICK_REPLIES_DRIVER} onClose={() => setChatOpen(false)} />
       )}
     </div>
   );
