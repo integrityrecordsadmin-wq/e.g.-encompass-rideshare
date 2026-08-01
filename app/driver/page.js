@@ -471,7 +471,7 @@ function IncomingRequestScreen({ ride, onAccept, onDecline }) {
           </div>
           <div className="mt-3 px-3 py-2 rounded-lg flex items-center gap-2"
             style={{ background: ride.payment_method === "cash" ? "#FEF3E2" : "#EDEBE2" }}>
-            <span className="text-xs font-semibold" style={{ color: ride.payment_method === "cash" ? "#B8860B" : "#111318" }}>
+            <span className="text-xs font-semibold" style={{ color: "#111318" }}>
               {ride.payment_method === "cash" ? "💵 Rider is paying cash — collect at drop-off" : "💳 Card on file"}
             </span>
           </div>
@@ -880,6 +880,7 @@ function ProfileScreen({ driver, onBack, onLogout }) {
 function VehicleInfoGateScreen({ driver, onComplete }) {
   const [carModel, setCarModel] = useState("");
   const [plate, setPlate] = useState("");
+  const [phone, setPhone] = useState("");
   const [vehicleType, setVehicleType] = useState("standard");
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
@@ -888,10 +889,11 @@ function VehicleInfoGateScreen({ driver, onComplete }) {
     e.preventDefault();
     setError("");
     if (!carModel || !plate) { setError("Fill in your car model and plate to continue."); return; }
+    if (!phone.trim()) { setError("Enter a phone number so riders can reach you if needed."); return; }
     setBusy(true);
     try {
-      await updateDriverProfile(driver.uid, { carModel, plate, vehicleType });
-      onComplete({ ...driver, carModel, plate, vehicleType });
+      await updateDriverProfile(driver.uid, { carModel, plate, vehicleType, phone: phone.trim() });
+      onComplete({ ...driver, carModel, plate, vehicleType, phone: phone.trim() });
     } catch (err) {
       setError(err.message?.replace("Firebase: ", "") || "Something went wrong.");
     }
@@ -916,6 +918,10 @@ function VehicleInfoGateScreen({ driver, onComplete }) {
             className="w-1/3 px-4 py-3.5 rounded-xl text-base outline-none"
             style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
         </div>
+        <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone number" type="tel"
+          className="w-full px-4 py-3.5 rounded-xl text-base outline-none"
+          style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
+        <p className="text-xs -mt-1" style={{ color: "#7A7F8A" }}>Kept private — never shown directly to riders.</p>
         <div>
           <p className="text-xs mb-2" style={{ color: "#7A7F8A" }}>What do you drive?</p>
           <div className="grid grid-cols-2 gap-2">
@@ -1006,7 +1012,7 @@ export default function DriverApp() {
     );
   }
 
-  if (!driver.carModel || !driver.plate) {
+  if (!driver.carModel || !driver.plate || !driver.phone) {
     return (
       <div className="w-full h-screen max-w-sm mx-auto overflow-hidden sm:rounded-[2rem] sm:h-[700px] sm:my-8 relative"
         style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.4)" }}>
