@@ -753,7 +753,13 @@ export default function RiderApp() {
       paymentMethod: paymentMethod || "card",
     };
 
-    const id = await createRide(rideData);
+    let id;
+    try {
+      id = await createRide(rideData);
+    } catch (err) {
+      alert("Couldn't request your ride: " + (err.message || "unknown error"));
+      return;
+    }
     if (isFamilyRide) {
       try { await createFamilyRideRoom(id); } catch (e) { /* room creation failed — trip still proceeds without video */ }
     }
