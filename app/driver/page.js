@@ -5,6 +5,9 @@ import {
 } from "lucide-react";
 import CityMap from "../../components/CityMap";
 import ChatPanel from "../../components/ChatPanel";
+import RecordingsScreen from "../../components/RecordingsScreen";
+import { startRecording, stopRecording } from "../../lib/recording";
+import { saveRecording } from "../../lib/recordingsStore";
 import { ACCENT, AMBER } from "../../lib/tokens";
 import { wazeNavigateUrl } from "../../lib/waze";
 import { VEHICLE_TYPES } from "../../lib/vehicleTypes";
@@ -206,7 +209,7 @@ function InstallAppButton() {
 }
 
 // ---------- Safety Toolkit ----------
-function SafetyToolkitScreen({ driver, onBack, onUpdateDriver }) {
+function SafetyToolkitScreen({ driver, onBack, onUpdateDriver, onViewRecordings }) {
   const [enabled, setEnabled] = useState(!!driver.audioRecordingEnabled);
   const [videoEnabled, setVideoEnabled] = useState(!!driver.videoRecordingEnabled);
 
@@ -270,6 +273,11 @@ function SafetyToolkitScreen({ driver, onBack, onUpdateDriver }) {
           <p>Recordings stay locked. Only you can choose to submit one if you report a safety issue.</p>
           <p>Riders will see a notice that recording may be on for a trip. In some states, both sides must be notified before recording.</p>
         </div>
+        <button onClick={onViewRecordings}
+          className="w-full mt-2 py-3 rounded-xl text-sm font-semibold"
+          style={{ background: "#1D2028", color: "#F5F5F0" }}>
+          View My Recordings
+        </button>
       </div>
     </div>
   );
@@ -545,6 +553,36 @@ function TripScreen({ ride, driver, onComplete }) {
       { enableHighAccuracy: true, maximumAge: 5000 }
     );
     return () => navigator.geolocation.clearWatch(watchId);
+  }, [ride.id]);
+
+  // Real on-device recording — starts when the trip begins (if enabled in
+  // Safety Toolkit) and saves locally when the trip screen closes. This
+  // triggers a real browser permission prompt the first time it runs.
+  useEffect(() => {
+    const wantAudio = !!driver.audioRecordingEnabled;
+    const wantVideo = !!driver.videoRecordingEnabled;
+    if (!wantAudio && !wantVideo) return;
+
+    let started = false;
+    startRecording({ audio: wantAudio, video: wantVideo }).then((ok) => {
+      started = ok;
+    });
+
+    return () => {
+      if (!started) return;
+      stopRecording().then((result) => {
+        if (!result) return;
+        saveRecording({
+          blob: result.blob,
+          mimeType: result.mimeType,
+          rideId: ride.id,
+          destination: ride.destination,
+          role: "driver",
+          kind: wantVideo ? "video" : "audio",
+        }).catch((e) => console.log("Couldn't save recording:", e.message));
+      });
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ride.id]);
 
   const pickupPos = ride.pickup_location;
@@ -1066,7 +1104,8 @@ export default function DriverApp() {
         <ProfileScreen driver={driver} onBack={() => setScreen("home")}
           onLogout={async () => { await signOut(); setDriver(null); }} />
       )}
-      {screen === "safety" && <SafetyToolkitScreen driver={driver} onBack={() => setScreen("home")} onUpdateDriver={setDriver} />}
+      {screen === "safety" && <SafetyToolkitScreen driver={driver} onBack={() => setScreen("home")} onUpdateDriver={setDriver} onViewRecordings={() => setScreen("recordings")} />}
+      {screen === "recordings" && <RecordingsScreen onBack={() => setScreen("safety")} accentColor={ACCENT} />}
       {screen === "earningsHub" && <EarningsHubScreen driver={driver} onBack={() => setScreen("home")} onUpdateDriver={setDriver} />}
       {screen === "request" && activeRide && <IncomingRequestScreen ride={activeRide} onAccept={handleAccept} onDecline={handleDecline} />}
       {screen === "trip" && activeRide && <TripScreen ride={activeRide} driver={driver} onComplete={handleComplete} />}
