@@ -18,11 +18,6 @@ import {
   startGoogleSignIn, completeGoogleSignInRider, sendMagicLinkRider, completeMagicLinkSignInRider,
   getRiderFlatratePlan, getSiteSettings,
 } from "../../lib/supabase-db";
-  signUpRider, loginRider, signOut, updateRiderProfile,
-  createRide, subscribeToRide, resetPassword, createFamilyRideRoom, getOnlineDriverTokens,
-  startGoogleSignIn, completeGoogleSignInRider, sendMagicLinkRider, completeMagicLinkSignInRider,
-  getRiderFlatratePlan,
-} from "../../lib/supabase-db";
 const QUICK_REPLIES_RIDER = ["I'm outside", "On my way down", "Running 2 min late", "Thank you!"];
 
 // Pink theme for the Family Ride live-watch frame only.
@@ -65,43 +60,7 @@ async function geocodeAddress(query) {
   const [lng, lat] = feature.center;
   return { lat, lng, placeName: feature.place_name };
 }
-const [siteEnabled, setSiteEnabled] = useState(true);
-const [checkingSite, setCheckingSite] = useState(true);
-const [siteEnabled, setSiteEnabled] = useState(true);
-const [checkingSite, setCheckingSite] = useState(true);
 
-useEffect(() => {
-  getSiteSettings().then(s => {
-    setSiteEnabled(s.site_enabled);
-    setCheckingSite(false);
-  });
-}, []);
-
-if (checkingSite) return <div style={{textAlign: 'center', padding: '60px 20px'}}>Loading...</div>;
-if (!siteEnabled) {
-  return (
-    <div style={{textAlign: 'center', padding: '60px 20px'}}>
-      <h2>Encompass Rideshare</h2>
-      <p>We're temporarily unavailable right now. Check back soon.</p>
-    </div>
-  );
-}
-useEffect(() => {
-  getSiteSettings().then(s => {
-    setSiteEnabled(s.site_enabled);
-    setCheckingSite(false);
-  });
-}, []);
-
-if (checkingSite) return <div>Loading...</div>;
-if (!siteEnabled) {
-  return (
-    <div style={{textAlign: 'center', padding: '60px 20px'}}>
-      <h2>Encompass Rideshare</h2>
-      <p>We're temporarily unavailable right now. Check back soon.</p>
-    </div>
-  );
-}
 // Real driving distance + time between two real coordinates, via Mapbox's
 // Directions API — actual roads, not a straight line or a guess.
 async function getDrivingRoute(pickup, dropoff) {
@@ -957,6 +916,15 @@ export default function RiderApp() {
   const [finalDriverName, setFinalDriverName] = useState("");
   const [isReturnTrip, setIsReturnTrip] = useState(false);
   const [pickupPos, setPickupPos] = useState(null);
+  const [siteEnabled, setSiteEnabled] = useState(true);
+  const [checkingSite, setCheckingSite] = useState(true);
+
+  useEffect(() => {
+    getSiteSettings().then((s) => {
+      setSiteEnabled(s.site_enabled);
+      setCheckingSite(false);
+    });
+  }, []);
 
   const handleConfirmDestination = async (dest, vehicleType, finalFare, isFamilyRide, paymentMethod, pickupLoc, dropoffLoc, realTrip) => {
     setDestination(dest);
@@ -991,6 +959,23 @@ export default function RiderApp() {
   const handleAccepted = (ride) => { setFinalDriverName(ride.driver_name || ""); setScreen("tracking"); };
   const handleComplete = (ride) => { setFinalDriverName(ride.driver_name || ""); setScreen("complete"); };
   const handleRequestReturn = () => { setIsReturnTrip(true); setScreen("destination"); };
+
+  if (checkingSite) {
+    return (
+      <div className="w-full h-screen max-w-sm mx-auto flex items-center justify-center" style={{ background: "#111318" }}>
+        <p style={{ color: "#7A7F8A" }}>Loading…</p>
+      </div>
+    );
+  }
+
+  if (!siteEnabled) {
+    return (
+      <div className="w-full h-screen max-w-sm mx-auto flex flex-col items-center justify-center px-8 text-center" style={{ background: "#111318" }}>
+        <h2 className="text-xl font-semibold" style={{ color: "#F5F5F0" }}>Encompass Rideshare</h2>
+        <p className="text-sm mt-2" style={{ color: "#7A7F8A" }}>We're temporarily unavailable right now. Check back soon.</p>
+      </div>
+    );
+  }
 
   if (!user) {
     return (
