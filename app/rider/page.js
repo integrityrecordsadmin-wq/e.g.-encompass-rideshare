@@ -801,6 +801,51 @@ function CompleteScreen({ destination, driverName, onDone, onRequestReturn }) {
   );
 }
 
+// ---------- Phone number gate (new sign-ins only) ----------
+function PhoneGateScreen({ user, onComplete }) {
+  const [phone, setPhone] = useState("");
+  const [error, setError] = useState("");
+  const [busy, setBusy] = useState(false);
+
+  const submit = async (e) => {
+    e.preventDefault();
+    setError("");
+    if (!phone.trim()) { setError("Enter a phone number to continue."); return; }
+    setBusy(true);
+    try {
+      await updateRiderProfile(user.uid, { phone: phone.trim() });
+      onComplete({ ...user, phone: phone.trim() });
+    } catch (err) {
+      setError(err.message || "Something went wrong.");
+    }
+    setBusy(false);
+  };
+
+  return (
+    <div className="min-h-full w-full flex flex-col justify-center px-8" style={{ background: "#111318" }}>
+      <div className="mb-8">
+        <div className="w-11 h-11 rounded-2xl mb-6 flex items-center justify-center" style={{ background: ACCENT }}>
+          <Navigation size={22} color="#111318" strokeWidth={2.5} />
+        </div>
+        <h1 className="text-3xl font-semibold tracking-tight" style={{ color: "#F5F5F0" }}>One more thing, {user.name?.split(" ")[0]}</h1>
+        <p className="mt-1 text-sm" style={{ color: "#7A7F8A" }}>Add a phone number so your driver can reach you if needed.</p>
+      </div>
+      <form onSubmit={submit} className="space-y-3">
+        <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone number" type="tel"
+          className="w-full px-4 py-3.5 rounded-xl text-base outline-none"
+          style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
+        <p className="text-xs" style={{ color: "#7A7F8A" }}>Kept private — never shown directly to your driver.</p>
+        {error && <p className="text-sm" style={{ color: "#FF6B6B" }}>{error}</p>}
+        <button type="submit" disabled={busy}
+          className="w-full py-3.5 rounded-xl font-medium text-base mt-2 transition active:scale-[0.98]"
+          style={{ background: ACCENT, color: "#111318" }}>
+          {busy ? "One sec…" : "Continue"}
+        </button>
+      </form>
+    </div>
+  );
+}
+
 // ---------- Root ----------
 export default function RiderApp() {
   const [user, setUser] = useState(null);
@@ -850,6 +895,15 @@ export default function RiderApp() {
       <div className="w-full h-screen max-w-sm mx-auto overflow-hidden sm:rounded-[2rem] sm:h-[700px] sm:my-8 relative"
         style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.4)" }}>
         <AuthScreen onAuthed={(u) => { setUser(u); setScreen("home"); }} />
+      </div>
+    );
+  }
+
+  if (!user.phone) {
+    return (
+      <div className="w-full h-screen max-w-sm mx-auto overflow-hidden sm:rounded-[2rem] sm:h-[700px] sm:my-8 relative"
+        style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.4)" }}>
+        <PhoneGateScreen user={user} onComplete={setUser} />
       </div>
     );
   }
