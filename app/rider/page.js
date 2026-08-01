@@ -13,7 +13,6 @@ import { ACCENT, AMBER } from "../../lib/tokens";
 import { fareForTrip } from "../../lib/fare";
 import { VEHICLE_TYPES } from "../../lib/vehicleTypes";
 import {
-import {
   signUpRider, loginRider, signOut, updateRiderProfile,
   createRide, subscribeToRide, resetPassword, createFamilyRideRoom, getOnlineDriverTokens,
   startGoogleSignIn, completeGoogleSignInRider, sendMagicLinkRider, completeMagicLinkSignInRider,
