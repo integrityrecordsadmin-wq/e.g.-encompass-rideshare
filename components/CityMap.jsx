@@ -66,7 +66,7 @@ export default function CityMap({ driverPos, pickupPos, dropoffPos, markerColor 
 
     mapInstance.current = new window.mapboxgl.Map({
       container: mapRef.current,
-      style: "mapbox://styles/mapbox/dark-v11",
+      style: "mapbox://styles/mapbox/light-v11",
       center: [startCenter.lng, startCenter.lat],
       zoom: driverPos || pickupPos || dropoffPos ? 14 : DEFAULT_ZOOM,
     });
