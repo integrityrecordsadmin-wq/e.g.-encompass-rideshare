@@ -470,6 +470,12 @@ function IncomingRequestScreen({ ride, onAccept, onDecline }) {
               <MapPin size={14} color={AMBER} /> Drop-off: {ride.destination}
             </div>
           </div>
+          <div className="mt-3 px-3 py-2 rounded-lg flex items-center gap-2"
+            style={{ background: ride.paymentMethod === "cash" ? "#FEF3E2" : "#EDEBE2" }}>
+            <span className="text-xs font-semibold" style={{ color: ride.paymentMethod === "cash" ? "#B8860B" : "#111318" }}>
+              {ride.paymentMethod === "cash" ? "💵 Rider is paying cash — collect at drop-off" : "💳 Card on file"}
+            </span>
+          </div>
           <div className="flex gap-3 mt-5">
             <button onClick={onDecline}
               className="flex-1 py-3.5 rounded-xl font-medium text-base flex items-center justify-center gap-2"
@@ -564,6 +570,11 @@ function TripScreen({ ride, driver, onComplete }) {
       )}
 
       <div className="absolute top-4 left-4 right-4">
+        {ride.paymentMethod === "cash" && (
+          <div className="px-4 py-2.5 rounded-xl flex items-center gap-2 mb-2" style={{ background: "rgba(184,134,11,0.2)", border: "1px solid #B8860B" }}>
+            <span className="text-xs font-semibold" style={{ color: "#F5F5F0" }}>💵 Cash trip — collect ${ride.fare?.toFixed(2)} at drop-off</span>
+          </div>
+        )}
         {ride.riderRecording && (
           <div className="px-4 py-2.5 rounded-xl flex items-center gap-2 mb-2" style={{ background: "rgba(108,92,231,0.15)", border: `1px solid ${ACCENT}` }}>
             <Shield size={14} color={ACCENT} />
