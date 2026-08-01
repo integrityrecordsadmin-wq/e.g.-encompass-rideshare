@@ -6,6 +6,9 @@ import {
 } from "lucide-react";
 import CityMap from "../../components/CityMap";
 import ChatPanel from "../../components/ChatPanel";
+import RecordingsScreen from "../../components/RecordingsScreen";
+import { startRecording, stopRecording } from "../../lib/recording";
+import { saveRecording } from "../../lib/recordingsStore";
 import { ACCENT, AMBER } from "../../lib/tokens";
 import { fareForTrip } from "../../lib/fare";
 import { VEHICLE_TYPES } from "../../lib/vehicleTypes";
@@ -151,7 +154,7 @@ function AuthScreen({ onAuthed }) {
 }
 
 // ---------- Safety Toolkit ----------
-function SafetyToolkitScreen({ user, onBack, onUpdateUser }) {
+function SafetyToolkitScreen({ user, onBack, onUpdateUser, onViewRecordings }) {
   const [enabled, setEnabled] = useState(!!user.audioRecordingEnabled);
   const [videoEnabled, setVideoEnabled] = useState(!!user.videoRecordingEnabled);
   const toggle = async () => {
@@ -212,6 +215,11 @@ function SafetyToolkitScreen({ user, onBack, onUpdateUser }) {
           <p>Recordings stay locked. Only you can choose to submit one if you report a safety issue.</p>
           <p>Your driver will see a notice that recording may be on for a trip. In some states, both sides must be notified before recording.</p>
         </div>
+        <button onClick={onViewRecordings}
+          className="w-full mt-2 py-3 rounded-xl text-sm font-semibold"
+          style={{ background: "#1D2028", color: "#F5F5F0" }}>
+          View My Recordings
+        </button>
       </div>
     </div>
   );
@@ -719,7 +727,7 @@ function FamilyWatchModal({ ride, onClose }) {
 }
 
 // ---------- Tracking ----------
-function TrackingScreen({ rideId, destination, onComplete }) {
+function TrackingScreen({ rideId, destination, user, onComplete }) {
   const [ride, setRide] = useState(null);
   const [chatOpen, setChatOpen] = useState(false);
   const [seenMsgCount, setSeenMsgCount] = useState(0);
@@ -731,6 +739,36 @@ function TrackingScreen({ rideId, destination, onComplete }) {
       if (r.status === "completed") onComplete(r);
     });
     return unsub;
+  }, [rideId]);
+
+  // Real on-device recording — starts as soon as tracking begins (if
+  // enabled in Safety Toolkit) and saves locally when the ride finishes.
+  // Triggers a real browser permission prompt the first time it runs.
+  useEffect(() => {
+    const wantAudio = !!user?.audioRecordingEnabled;
+    const wantVideo = !!user?.videoRecordingEnabled;
+    if (!wantAudio && !wantVideo) return;
+
+    let started = false;
+    startRecording({ audio: wantAudio, video: wantVideo }).then((ok) => {
+      started = ok;
+    });
+
+    return () => {
+      if (!started) return;
+      stopRecording().then((result) => {
+        if (!result) return;
+        saveRecording({
+          blob: result.blob,
+          mimeType: result.mimeType,
+          rideId,
+          destination,
+          role: "rider",
+          kind: wantVideo ? "video" : "audio",
+        }).catch((e) => console.log("Couldn't save recording:", e.message));
+      });
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [rideId]);
 
   const status = ride?.status || "accepted";
@@ -936,10 +974,11 @@ export default function RiderApp() {
       style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.4)" }}>
       {screen === "home" && <HomeScreen user={user} onRequest={() => { setIsReturnTrip(false); setScreen("destination"); }} onLogout={async () => { await signOut(); setUser(null); }} onSafety={() => setScreen("safety")} onMyPlan={() => setScreen("myplan")} />}
       {screen === "myplan" && <MyPlanScreen user={user} onBack={() => setScreen("home")} />}
-      {screen === "safety" && <SafetyToolkitScreen user={user} onBack={() => setScreen("home")} onUpdateUser={setUser} />}
+      {screen === "safety" && <SafetyToolkitScreen user={user} onBack={() => setScreen("home")} onUpdateUser={setUser} onViewRecordings={() => setScreen("recordings")} />}
+      {screen === "recordings" && <RecordingsScreen onBack={() => setScreen("safety")} accentColor={ACCENT} />}
       {screen === "destination" && <DestinationScreen onBack={() => setScreen(isReturnTrip ? "complete" : "home")} onConfirm={handleConfirmDestination} isReturnTrip={isReturnTrip} />}
       {screen === "finding" && <FindingDriverScreen rideId={rideId} destination={destination} pickupPos={pickupPos} onAccepted={handleAccepted} onCancelled={() => setScreen("home")} />}
-      {screen === "tracking" && <TrackingScreen rideId={rideId} destination={destination} onComplete={handleComplete} />}
+      {screen === "tracking" && <TrackingScreen rideId={rideId} destination={destination} user={user} onComplete={handleComplete} />}
       {screen === "complete" && <CompleteScreen destination={destination} driverName={finalDriverName} onDone={() => setScreen("home")} onRequestReturn={handleRequestReturn} />}
     </div>
   );
