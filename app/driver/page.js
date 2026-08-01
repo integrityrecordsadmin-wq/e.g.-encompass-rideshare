@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import {
-  Navigation, User, Car, Clock, Check, X, Star, Power, DollarSign, MapPin, Shield, Mic, ChevronLeft, MessageCircle, BarChart3,
+  Navigation, User, Car, Clock, Check, X, Star, Power, DollarSign, MapPin, Shield, Mic, Video, ChevronLeft, MessageCircle, BarChart3,
 } from "lucide-react";
 import CityMap from "../../components/CityMap";
 import ChatPanel from "../../components/ChatPanel";
@@ -208,12 +208,20 @@ function InstallAppButton() {
 // ---------- Safety Toolkit ----------
 function SafetyToolkitScreen({ driver, onBack, onUpdateDriver }) {
   const [enabled, setEnabled] = useState(!!driver.audioRecordingEnabled);
+  const [videoEnabled, setVideoEnabled] = useState(!!driver.videoRecordingEnabled);
 
   const toggle = async () => {
     const next = !enabled;
     setEnabled(next);
     await updateDriverProfile(driver.uid, { audioRecordingEnabled: next });
     onUpdateDriver({ ...driver, audioRecordingEnabled: next });
+  };
+
+  const toggleVideo = async () => {
+    const next = !videoEnabled;
+    setVideoEnabled(next);
+    await updateDriverProfile(driver.uid, { videoRecordingEnabled: next });
+    onUpdateDriver({ ...driver, videoRecordingEnabled: next });
   };
 
   return (
@@ -224,7 +232,7 @@ function SafetyToolkitScreen({ driver, onBack, onUpdateDriver }) {
         </button>
         <h2 className="text-base font-semibold" style={{ color: "#111318" }}>Safety Toolkit</h2>
       </div>
-      <div className="px-4 mt-4">
+      <div className="px-4 mt-4 space-y-3">
         <div className="rounded-2xl p-4" style={{ background: "#fff", border: "1px solid #E4E2D9" }}>
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: `${ACCENT}22` }}>
@@ -241,7 +249,23 @@ function SafetyToolkitScreen({ driver, onBack, onUpdateDriver }) {
             </button>
           </div>
         </div>
-        <div className="mt-4 space-y-3 text-xs" style={{ color: "#7A7F8A" }}>
+        <div className="rounded-2xl p-4" style={{ background: "#fff", border: "1px solid #E4E2D9" }}>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: `${AMBER}22` }}>
+              <Video size={18} color={AMBER} />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-semibold" style={{ color: "#111318" }}>Video recording</p>
+              <p className="text-xs mt-0.5" style={{ color: "#7A7F8A" }}>Record trip video on your device for safety</p>
+            </div>
+            <button onClick={toggleVideo}
+              className="w-12 h-7 rounded-full flex items-center px-0.5 transition"
+              style={{ background: videoEnabled ? AMBER : "#D8D6CE", justifyContent: videoEnabled ? "flex-end" : "flex-start" }}>
+              <span className="w-6 h-6 rounded-full bg-white block" />
+            </button>
+          </div>
+        </div>
+        <div className="mt-1 space-y-3 text-xs" style={{ color: "#7A7F8A" }}>
           <p>When on, your trips are recorded on your own device — not on a server, not visible to riders or anyone else.</p>
           <p>Recordings stay locked. Only you can choose to submit one if you report a safety issue.</p>
           <p>Riders will see a notice that recording may be on for a trip. In some states, both sides must be notified before recording.</p>
@@ -590,19 +614,19 @@ function TripScreen({ ride, driver, onComplete }) {
 
       <div className="absolute top-4 left-4 right-4">
         {ride.payment_method === "cash" && (
-          <div className="px-4 py-2.5 rounded-xl flex items-center gap-2 mb-2" style={{ background: "rgba(184,134,11,0.2)", border: "1px solid #B8860B" }}>
-            <span className="text-xs font-semibold" style={{ color: "#F5F5F0" }}>💵 Cash trip — collect ${ride.fare?.toFixed(2)} at drop-off</span>
+          <div className="px-4 py-3 rounded-xl flex items-center gap-2 mb-2" style={{ background: "#F5A623", border: "1px solid #B8860B" }}>
+            <span className="text-sm font-bold" style={{ color: "#111318" }}>💵 CASH TRIP — Collect ${ride.fare?.toFixed(2)} at drop-off</span>
           </div>
         )}
         {ride.rider_recording && (
-          <div className="px-4 py-2.5 rounded-xl flex items-center gap-2 mb-2" style={{ background: "rgba(108,92,231,0.15)", border: `1px solid ${ACCENT}` }}>
-            <Shield size={14} color={ACCENT} />
-            <span className="text-xs" style={{ color: "#F5F5F0" }}>Rider may be audio recording this trip</span>
+          <div className="px-4 py-2.5 rounded-xl flex items-center gap-2 mb-2" style={{ background: ACCENT, border: `1px solid ${ACCENT}` }}>
+            <Shield size={14} color="#F5F5F0" />
+            <span className="text-xs font-semibold" style={{ color: "#F5F5F0" }}>Rider may be audio recording this trip</span>
           </div>
         )}
         {ride.is_family_ride && (
-          <div className="px-4 py-2 rounded-xl flex items-center gap-2 mb-2" style={{ background: "rgba(232,84,124,0.2)", border: "1px solid #E8547C" }}>
-            <span className="text-xs font-medium" style={{ color: "#F5F5F0" }}>❤ Family Ride — parent is watching live</span>
+          <div className="px-4 py-2 rounded-xl flex items-center gap-2 mb-2" style={{ background: "#E8547C", border: "1px solid #E8547C" }}>
+            <span className="text-xs font-semibold" style={{ color: "#fff" }}>❤ Family Ride — parent is watching live</span>
           </div>
         )}
         <div className="px-4 py-2.5 rounded-full flex items-center gap-2" style={{ background: "rgba(17,19,24,0.85)", border: "1px solid #2B2F3A" }}>
