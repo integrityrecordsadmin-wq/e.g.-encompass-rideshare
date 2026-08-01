@@ -1,4 +1,3 @@
-
 "use client";
 import { useState, useEffect, useRef } from "react";
 import {
@@ -362,6 +361,7 @@ function DestinationScreen({ onBack, onConfirm, isReturnTrip }) {
   const [vehicle, setVehicle] = useState("standard");
   const [isFamilyRide, setIsFamilyRide] = useState(false);
   const [familyConsent, setFamilyConsent] = useState(false);
+  const [paymentMethod, setPaymentMethod] = useState("card");
   const baseTrip = dest.trim() ? seededTrip(dest.trim()) : null;
   const baseFare = dest.trim() ? fareFor(dest.trim()).fare : 0;
   const selectedVehicle = VEHICLE_TYPES.find((v) => v.id === vehicle);
@@ -448,11 +448,32 @@ function DestinationScreen({ onBack, onConfirm, isReturnTrip }) {
               </div>
               <p className="text-xl font-semibold" style={{ color: ACCENT }}>${finalFare.toFixed(2)}</p>
             </div>
+
+            <div>
+              <p className="text-xs uppercase tracking-wide mb-2 mt-1" style={{ color: "#9A9890" }}>How will you pay?</p>
+              <div className="flex gap-2">
+                <button onClick={() => setPaymentMethod("card")}
+                  className="flex-1 py-3 rounded-xl text-sm font-medium transition"
+                  style={{ background: paymentMethod === "card" ? "#111318" : "#fff", color: paymentMethod === "card" ? "#F5F5F0" : "#111318", border: paymentMethod === "card" ? `1.5px solid ${ACCENT}` : "1px solid #E4E2D9" }}>
+                  💳 Card
+                </button>
+                <button onClick={() => setPaymentMethod("cash")}
+                  className="flex-1 py-3 rounded-xl text-sm font-medium transition"
+                  style={{ background: paymentMethod === "cash" ? "#111318" : "#fff", color: paymentMethod === "cash" ? "#F5F5F0" : "#111318", border: paymentMethod === "cash" ? `1.5px solid ${ACCENT}` : "1px solid #E4E2D9" }}>
+                  💵 Cash
+                </button>
+              </div>
+              {paymentMethod === "cash" && (
+                <p className="text-xs mt-2" style={{ color: "#7A7F8A" }}>
+                  Have ${finalFare.toFixed(2)} ready to pay your driver directly at the end of the trip.
+                </p>
+              )}
+            </div>
           </>
         )}
       </div>
       <div className="p-4">
-        <button disabled={!canConfirm} onClick={() => onConfirm(dest.trim(), vehicle, finalFare, isFamilyRide)}
+        <button disabled={!canConfirm} onClick={() => onConfirm(dest.trim(), vehicle, finalFare, isFamilyRide, paymentMethod)}
           className="w-full py-3.5 rounded-xl font-medium text-base disabled:opacity-40" style={{ background: ACCENT, color: "#111318" }}>
           {dest.trim() ? `Confirm ${selectedVehicle.name} • $${finalFare.toFixed(2)}` : "Confirm destination"}
         </button>
@@ -719,7 +740,7 @@ export default function RiderApp() {
   const [finalDriverName, setFinalDriverName] = useState("");
   const [isReturnTrip, setIsReturnTrip] = useState(false);
 
-  const handleConfirmDestination = async (dest, vehicleType, finalFare, isFamilyRide) => {
+  const handleConfirmDestination = async (dest, vehicleType, finalFare, isFamilyRide, paymentMethod) => {
     setDestination(dest);
     const trip = seededTrip(dest);
 
@@ -729,6 +750,7 @@ export default function RiderApp() {
       vehicleType,
       isFamilyRide: !!isFamilyRide,
       riderRecording: !!user.audioRecordingEnabled,
+      paymentMethod: paymentMethod || "card",
     };
 
     const id = await createRide(rideData);
