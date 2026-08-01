@@ -8,6 +8,7 @@ import {
   scheduleVerificationCall, reviewDriverDocuments, updateDriverProfile, loginAdmin,
   subscribeToActiveAnnouncements, createAnnouncement, deactivateAnnouncements,
   getPendingFlatratePlans, approveFlatratePlan, rejectFlatratePlan, resetPassword,
+  getSiteSettings, setSiteEnabled,
 } from "../../lib/supabase-db";
 export const dynamic = "force-dynamic";
 const STATUS_META = {
@@ -38,7 +39,48 @@ function timeAgo(ts) {
 function InstallAppButton() {
   const [deferredPrompt, setDeferredPrompt] = useState(null);
   const [installed, setInstalled] = useState(false);
+function SiteToggleCard() {
+  const [enabled, setEnabled] = useState(true);
+  const [loading, setLoading] = useState(true);
+  const [busy, setBusy] = useState(false);
 
+  useEffect(() => {
+    getSiteSettings().then((s) => {
+      setEnabled(s.site_enabled);
+      setLoading(false);
+    });
+  }, []);
+
+  const handleToggle = async () => {
+    const next = !enabled;
+    setBusy(true);
+    try {
+      await setSiteEnabled(next);
+      setEnabled(next);
+    } catch (err) {
+      alert("Couldn't update site status: " + (err.message || "unknown error"));
+    }
+    setBusy(false);
+  };
+
+  if (loading) return null;
+
+  return (
+    <div className="rounded-2xl p-4 mb-6 flex items-center justify-between" style={{ background: CARD, border: `1px solid ${BORDER}` }}>
+      <div>
+        <p className="text-sm font-semibold" style={{ color: TEXT }}>Rider & driver site access</p>
+        <p className="text-xs mt-0.5" style={{ color: MUTED }}>
+          {enabled ? "Live — riders and drivers can sign in and book" : "Turned off — riders and drivers see an unavailable message"}
+        </p>
+      </div>
+      <button onClick={handleToggle} disabled={busy}
+        className="w-14 h-8 rounded-full flex items-center px-1 transition flex-shrink-0"
+        style={{ background: enabled ? "#4ADE80" : "#3D1F1F", justifyContent: enabled ? "flex-end" : "flex-start" }}>
+        <span className="w-6 h-6 rounded-full bg-white block" />
+      </button>
+    </div>
+  );
+}
   useEffect(() => {
     function handleBeforeInstall(e) {
       e.preventDefault();
@@ -562,6 +604,8 @@ function AdminDashboard() {
           </div>
           <InstallAppButton />
         </div>
+
+        <SiteToggleCard />
 
         <InsuranceExpiryBanner drivers={drivers} />
 
