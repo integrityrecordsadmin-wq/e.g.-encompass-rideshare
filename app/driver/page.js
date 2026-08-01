@@ -35,7 +35,25 @@ function DriverAuthScreen({ onAuthed }) {
   const [showHelp, setShowHelp] = useState(false);
 const [siteEnabled, setSiteEnabled] = useState(true);
 const [checkingSite, setCheckingSite] = useState(true);
+const [siteEnabled, setSiteEnabled] = useState(true);
+const [checkingSite, setCheckingSite] = useState(true);
 
+useEffect(() => {
+  getSiteSettings().then(s => {
+    setSiteEnabled(s.site_enabled);
+    setCheckingSite(false);
+  });
+}, []);
+
+if (checkingSite) return <div style={{textAlign: 'center', padding: '60px 20px'}}>Loading...</div>;
+if (!siteEnabled) {
+  return (
+    <div style={{textAlign: 'center', padding: '60px 20px'}}>
+      <h2>Encompass Rideshare</h2>
+      <p>We're temporarily unavailable right now. Check back soon.</p>
+    </div>
+  );
+}
 useEffect(() => {
   getSiteSettings().then(s => {
     setSiteEnabled(s.site_enabled);
