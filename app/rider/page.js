@@ -7,7 +7,7 @@ import {
 import CityMap from "../../components/CityMap";
 import ChatPanel from "../../components/ChatPanel";
 import { ACCENT, AMBER } from "../../lib/tokens";
-import { fareFor, seededTrip } from "../../lib/fare";
+import { fareForTrip } from "../../lib/fare";
 import { VEHICLE_TYPES } from "../../lib/vehicleTypes";
 import {
   signUpRider, loginRider, signOut, updateRiderProfile,
@@ -56,6 +56,21 @@ async function geocodeAddress(query) {
   if (!feature) throw new Error("Couldn't find that address — try being more specific.");
   const [lng, lat] = feature.center;
   return { lat, lng, placeName: feature.place_name };
+}
+
+// Real driving distance + time between two real coordinates, via Mapbox's
+// Directions API — actual roads, not a straight line or a guess.
+async function getDrivingRoute(pickup, dropoff) {
+  const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+  const url = `https://api.mapbox.com/directions/v5/mapbox/driving/${pickup.lng},${pickup.lat};${dropoff.lng},${dropoff.lat}?access_token=${token}&overview=false`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Couldn't calculate the route.");
+  const data = await res.json();
+  const route = data.routes && data.routes[0];
+  if (!route) throw new Error("Couldn't find a driving route to that address.");
+  const miles = Math.round((route.distance / 1609.34) * 10) / 10; // meters -> miles
+  const minutes = Math.round(route.duration / 60); // seconds -> minutes
+  return { miles, minutes };
 }
 
 // ---------- Auth ----------
@@ -379,13 +394,16 @@ function DestinationScreen({ onBack, onConfirm, isReturnTrip }) {
   const [paymentMethod, setPaymentMethod] = useState("card");
   const [pickupLoc, setPickupLoc] = useState(null);
   const [pickupError, setPickupError] = useState("");
+  const [dropoffLoc, setDropoffLoc] = useState(null);
+  const [realTrip, setRealTrip] = useState(null); // { miles, minutes } — from real roads, via Mapbox
+  const [tripLoading, setTripLoading] = useState(false);
+  const [tripError, setTripError] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [confirmError, setConfirmError] = useState("");
-  const baseTrip = dest.trim() ? seededTrip(dest.trim()) : null;
-  const baseFare = dest.trim() ? fareFor(dest.trim()).fare : 0;
   const selectedVehicle = VEHICLE_TYPES.find((v) => v.id === vehicle);
+  const baseFare = realTrip ? fareForTrip(realTrip.miles, realTrip.minutes) : 0;
   const finalFare = baseFare * selectedVehicle.multiplier;
-  const canConfirm = dest.trim() && (!isFamilyRide || familyConsent) && !confirming;
+  const canConfirm = dest.trim() && !!realTrip && (!isFamilyRide || familyConsent) && !confirming;
 
   useEffect(() => {
     getCurrentPosition()
@@ -393,16 +411,43 @@ function DestinationScreen({ onBack, onConfirm, isReturnTrip }) {
       .catch((err) => setPickupError(err.message));
   }, []);
 
-  const handleConfirmTap = async () => {
+  // Debounced real-distance lookup: once the rider pauses typing (and we
+  // know their pickup location), geocode the destination and pull the
+  // actual driving distance/time from Mapbox — no more fake numbers.
+  useEffect(() => {
+    setRealTrip(null);
+    setDropoffLoc(null);
+    setTripError("");
+    if (!dest.trim() || dest.trim().length < 4 || !pickupLoc) return;
+
+    let cancelled = false;
+    setTripLoading(true);
+    const timer = setTimeout(async () => {
+      try {
+        const loc = await geocodeAddress(dest.trim());
+        const route = await getDrivingRoute(pickupLoc, loc);
+        if (!cancelled) {
+          setDropoffLoc(loc);
+          setRealTrip(route);
+        }
+      } catch (err) {
+        if (!cancelled) setTripError(err.message || "Couldn't find that address.");
+      } finally {
+        if (!cancelled) setTripLoading(false);
+      }
+    }, 700);
+
+    return () => { cancelled = true; clearTimeout(timer); };
+  }, [dest, pickupLoc]);
+
+  const handleConfirmTap = () => {
     setConfirmError("");
-    setConfirming(true);
-    try {
-      const dropoffLoc = await geocodeAddress(dest.trim());
-      onConfirm(dest.trim(), vehicle, finalFare, isFamilyRide, paymentMethod, pickupLoc, dropoffLoc);
-    } catch (err) {
-      setConfirmError(err.message || "Couldn't confirm your ride. Please try again.");
-      setConfirming(false);
+    if (!realTrip || !dropoffLoc) {
+      setConfirmError("Still finding that address — one moment.");
+      return;
     }
+    setConfirming(true);
+    onConfirm(dest.trim(), vehicle, finalFare, isFamilyRide, paymentMethod, pickupLoc, dropoffLoc, realTrip);
   };
 
   return (
@@ -426,7 +471,16 @@ function DestinationScreen({ onBack, onConfirm, isReturnTrip }) {
             name="ride-destination-field" autoComplete="off" autoCorrect="off" spellCheck="false"
             className="text-sm outline-none w-full bg-transparent" style={{ color: "#111318" }} />
         </div>
-        {dest.trim() && (
+        {dest.trim() && tripLoading && !realTrip && (
+          <div className="rounded-xl p-4 flex items-center gap-3" style={{ background: "#EDEBE2" }}>
+            <div className="w-4 h-4 rounded-full border-2 animate-spin" style={{ borderColor: ACCENT, borderTopColor: "transparent" }} />
+            <p className="text-sm" style={{ color: "#7A7F8A" }}>Finding the route…</p>
+          </div>
+        )}
+        {tripError && !tripLoading && (
+          <p className="text-sm px-1" style={{ color: "#C0392B" }}>{tripError}</p>
+        )}
+        {dest.trim() && realTrip && (
           <>
             <div>
               <p className="text-xs uppercase tracking-wide mb-2 mt-1" style={{ color: "#9A9890" }}>Choose a ride</p>
@@ -482,7 +536,7 @@ function DestinationScreen({ onBack, onConfirm, isReturnTrip }) {
               <div>
                 <p className="text-sm font-semibold" style={{ color: "#111318" }}>{selectedVehicle.name} estimate</p>
                 <p className="text-xs mt-0.5" style={{ color: "#7A7F8A" }}>
-                  {baseTrip.miles} mi · ~{baseTrip.minutes} min
+                  {realTrip.miles} mi · ~{realTrip.minutes} min
                 </p>
               </div>
               <p className="text-xl font-semibold" style={{ color: ACCENT }}>${finalFare.toFixed(2)}</p>
@@ -515,7 +569,7 @@ function DestinationScreen({ onBack, onConfirm, isReturnTrip }) {
         {confirmError && <p className="text-sm mb-2 text-center" style={{ color: "#C0392B" }}>{confirmError}</p>}
         <button disabled={!canConfirm} onClick={handleConfirmTap}
           className="w-full py-3.5 rounded-xl font-medium text-base disabled:opacity-40" style={{ background: ACCENT, color: "#111318" }}>
-          {confirming ? "Finding that address…" : dest.trim() ? `Confirm ${selectedVehicle.name} • $${finalFare.toFixed(2)}` : "Confirm destination"}
+          {confirming ? "Requesting…" : dest.trim() ? `Confirm ${selectedVehicle.name} • $${finalFare.toFixed(2)}` : "Confirm destination"}
         </button>
       </div>
     </div>
@@ -757,14 +811,13 @@ export default function RiderApp() {
   const [isReturnTrip, setIsReturnTrip] = useState(false);
   const [pickupPos, setPickupPos] = useState(null);
 
-  const handleConfirmDestination = async (dest, vehicleType, finalFare, isFamilyRide, paymentMethod, pickupLoc, dropoffLoc) => {
+  const handleConfirmDestination = async (dest, vehicleType, finalFare, isFamilyRide, paymentMethod, pickupLoc, dropoffLoc, realTrip) => {
     setDestination(dest);
     setPickupPos(pickupLoc || null);
-    const trip = seededTrip(dest);
 
     const rideData = {
       riderName: user.name, riderUid: user.uid,
-      destination: dest, fare: finalFare, miles: trip.miles, minutes: trip.minutes,
+      destination: dest, fare: finalFare, miles: realTrip?.miles || 0, minutes: realTrip?.minutes || 0,
       vehicleType,
       isFamilyRide: !!isFamilyRide,
       riderRecording: !!user.audioRecordingEnabled,
