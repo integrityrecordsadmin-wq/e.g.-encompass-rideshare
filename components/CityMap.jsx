@@ -70,7 +70,8 @@ export default function CityMap({ driverPos, pickupPos, dropoffPos, markerColor 
       center: [startCenter.lng, startCenter.lat],
       zoom: driverPos || pickupPos || dropoffPos ? 14 : DEFAULT_ZOOM,
     });
-    mapInstance.current.addControl(new window.mapboxgl.NavigationControl({ showCompass: false }), "top-right");
+    // No on-screen zoom control — it overlapped the app's own top-right
+    // buttons (earnings, safety, profile). Pinch-to-zoom still works fine.
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [ready]);
 
