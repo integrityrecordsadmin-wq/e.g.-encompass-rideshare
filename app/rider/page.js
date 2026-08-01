@@ -15,9 +15,6 @@ import {
   startGoogleSignIn, completeGoogleSignInRider, sendMagicLinkRider, completeMagicLinkSignInRider,
   getRiderFlatratePlan,
 } from "../../lib/supabase-db";
-const HOME = { x: 20, y: 78 };
-const DEST = { x: 82, y: 22 };
-const DRIVER_START = { x: 8, y: 30 };
 const QUICK_REPLIES_RIDER = ["I'm outside", "On my way down", "Running 2 min late", "Thank you!"];
 
 // Pink theme for the Family Ride live-watch frame only.
@@ -33,14 +30,32 @@ const FAMILY = {
   coral: "#FB7185",
 };
 
-function lerp(a, b, t) { return a + (b - a) * t; }
-function pointAt(path, t) {
-  const segCount = path.length - 1;
-  const scaled = t * segCount;
-  const i = Math.min(Math.floor(scaled), segCount - 1);
-  const localT = scaled - i;
-  const a = path[i], b = path[i + 1];
-  return { x: lerp(a.x, b.x, localT), y: lerp(a.y, b.y, localT) };
+// ---------- Real GPS helpers ----------
+function getCurrentPosition() {
+  return new Promise((resolve, reject) => {
+    if (!("geolocation" in navigator)) {
+      reject(new Error("Location services aren't available on this device."));
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      (pos) => resolve({ lat: pos.coords.latitude, lng: pos.coords.longitude }),
+      (err) => reject(new Error(err.message || "Couldn't get your location.")),
+      { enableHighAccuracy: true, timeout: 10000, maximumAge: 30000 }
+    );
+  });
+}
+
+// Turns typed destination text into real coordinates via Mapbox's Geocoding API.
+async function geocodeAddress(query) {
+  const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+  const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${token}&limit=1`;
+  const res = await fetch(url);
+  if (!res.ok) throw new Error("Couldn't look up that address.");
+  const data = await res.json();
+  const feature = data.features && data.features[0];
+  if (!feature) throw new Error("Couldn't find that address — try being more specific.");
+  const [lng, lat] = feature.center;
+  return { lat, lng, placeName: feature.place_name };
 }
 
 // ---------- Auth ----------
@@ -314,7 +329,7 @@ function InstallAppButton() {
 function HomeScreen({ user, onRequest, onLogout, onSafety, onMyPlan }) {
   return (
     <div className="relative w-full h-full">
-      <div className="absolute inset-0"><CityMap driverPos={null} showRoute={false} /></div>
+      <div className="absolute inset-0"><CityMap showRoute={false} /></div>
       <div className="absolute top-0 left-0 right-0 p-4 flex items-center justify-between">
         <button onClick={onLogout} aria-label="Account" className="w-10 h-10 rounded-full flex items-center justify-center"
           style={{ background: "rgba(17,19,24,0.85)", border: "1px solid #2B2F3A" }}>
@@ -362,11 +377,33 @@ function DestinationScreen({ onBack, onConfirm, isReturnTrip }) {
   const [isFamilyRide, setIsFamilyRide] = useState(false);
   const [familyConsent, setFamilyConsent] = useState(false);
   const [paymentMethod, setPaymentMethod] = useState("card");
+  const [pickupLoc, setPickupLoc] = useState(null);
+  const [pickupError, setPickupError] = useState("");
+  const [confirming, setConfirming] = useState(false);
+  const [confirmError, setConfirmError] = useState("");
   const baseTrip = dest.trim() ? seededTrip(dest.trim()) : null;
   const baseFare = dest.trim() ? fareFor(dest.trim()).fare : 0;
   const selectedVehicle = VEHICLE_TYPES.find((v) => v.id === vehicle);
   const finalFare = baseFare * selectedVehicle.multiplier;
-  const canConfirm = dest.trim() && (!isFamilyRide || familyConsent);
+  const canConfirm = dest.trim() && (!isFamilyRide || familyConsent) && !confirming;
+
+  useEffect(() => {
+    getCurrentPosition()
+      .then(setPickupLoc)
+      .catch((err) => setPickupError(err.message));
+  }, []);
+
+  const handleConfirmTap = async () => {
+    setConfirmError("");
+    setConfirming(true);
+    try {
+      const dropoffLoc = await geocodeAddress(dest.trim());
+      onConfirm(dest.trim(), vehicle, finalFare, isFamilyRide, paymentMethod, pickupLoc, dropoffLoc);
+    } catch (err) {
+      setConfirmError(err.message || "Couldn't confirm your ride. Please try again.");
+      setConfirming(false);
+    }
+  };
 
   return (
     <div className="w-full h-full flex flex-col" style={{ background: "#F5F5F0" }}>
@@ -378,8 +415,10 @@ function DestinationScreen({ onBack, onConfirm, isReturnTrip }) {
       </div>
       <div className="px-4 mt-2 space-y-3 flex-1 overflow-y-auto">
         <div className="flex items-center gap-3 px-4 py-3 rounded-xl" style={{ background: "#EDEBE2" }}>
-          <div className="w-2 h-2 rounded-full" style={{ background: ACCENT }} />
-          <span className="text-sm" style={{ color: "#111318" }}>Current location</span>
+          <div className="w-2 h-2 rounded-full" style={{ background: pickupError ? "#FF6B6B" : ACCENT }} />
+          <span className="text-sm" style={{ color: "#111318" }}>
+            {pickupError ? "Location unavailable — enable location services" : "Current location"}
+          </span>
         </div>
         <div className="flex items-center gap-3 px-4 py-3 rounded-xl" style={{ background: "#fff", border: `1.5px solid ${ACCENT}` }}>
           <div className="w-2 h-2 rounded-sm" style={{ background: AMBER }} />
@@ -473,9 +512,10 @@ function DestinationScreen({ onBack, onConfirm, isReturnTrip }) {
         )}
       </div>
       <div className="p-4">
-        <button disabled={!canConfirm} onClick={() => onConfirm(dest.trim(), vehicle, finalFare, isFamilyRide, paymentMethod)}
+        {confirmError && <p className="text-sm mb-2 text-center" style={{ color: "#C0392B" }}>{confirmError}</p>}
+        <button disabled={!canConfirm} onClick={handleConfirmTap}
           className="w-full py-3.5 rounded-xl font-medium text-base disabled:opacity-40" style={{ background: ACCENT, color: "#111318" }}>
-          {dest.trim() ? `Confirm ${selectedVehicle.name} • $${finalFare.toFixed(2)}` : "Confirm destination"}
+          {confirming ? "Finding that address…" : dest.trim() ? `Confirm ${selectedVehicle.name} • $${finalFare.toFixed(2)}` : "Confirm destination"}
         </button>
       </div>
     </div>
@@ -483,7 +523,7 @@ function DestinationScreen({ onBack, onConfirm, isReturnTrip }) {
 }
 
 // ---------- Finding driver ----------
-function FindingDriverScreen({ rideId, destination, onAccepted, onCancelled }) {
+function FindingDriverScreen({ rideId, destination, pickupPos, onAccepted, onCancelled }) {
   const [cancelled, setCancelled] = useState(false);
 
   useEffect(() => {
@@ -510,7 +550,7 @@ function FindingDriverScreen({ rideId, destination, onAccepted, onCancelled }) {
 
   return (
     <div className="w-full h-full relative">
-      <CityMap driverPos={DRIVER_START} showRoute={false} />
+      <CityMap pickupPos={pickupPos} showRoute={false} />
       <div className="absolute inset-0 flex flex-col items-center justify-center px-8">
         <div className="relative w-16 h-16 mb-6">
           <div className="absolute inset-0 rounded-full animate-ping" style={{ background: ACCENT, opacity: 0.3 }} />
@@ -546,9 +586,9 @@ function FamilyWatchModal({ ride, onClose }) {
               boxShadow: "0 12px 30px -8px rgba(74,29,63,0.35), inset 0 0 0 1px rgba(255,255,255,0.4)" }}>
             <div className="w-full h-full rounded-[3px] p-[6px]" style={{ background: "#fff", boxShadow: "inset 0 2px 6px rgba(74,29,63,0.25)" }}>
               <div className="relative w-full h-full rounded-[2px] overflow-hidden bg-black">
-                {ride.familyVideoUrl ? (
+                {ride.family_video_url ? (
                   <iframe
-                    src={`${ride.familyVideoUrl}?userName=Parent`}
+                    src={`${ride.family_video_url}?userName=Parent`}
                     allow="camera; microphone; autoplay; display-capture"
                     className="w-full h-full border-0"
                   />
@@ -587,8 +627,8 @@ function FamilyWatchModal({ ride, onClose }) {
             <ShieldCheck size={18} color="#fff" />
           </div>
           <div className="flex-1 min-w-0">
-            <p className="text-sm font-semibold truncate" style={{ color: FAMILY.plum }}>{ride.driverName || "Your driver"}</p>
-            <p className="text-xs truncate" style={{ color: FAMILY.plumSoft }}>{ride.carModel}{ride.plate ? ` · ${ride.plate}` : ""}</p>
+            <p className="text-sm font-semibold truncate" style={{ color: FAMILY.plum }}>{ride.driver_name || "Your driver"}</p>
+            <p className="text-xs truncate" style={{ color: FAMILY.plumSoft }}>{ride.car_model}{ride.plate ? ` · ${ride.plate}` : ""}</p>
           </div>
         </div>
 
@@ -604,16 +644,9 @@ function FamilyWatchModal({ ride, onClose }) {
 // ---------- Tracking ----------
 function TrackingScreen({ rideId, destination, onComplete }) {
   const [ride, setRide] = useState(null);
-  const [t, setT] = useState(0);
   const [chatOpen, setChatOpen] = useState(false);
   const [seenMsgCount, setSeenMsgCount] = useState(0);
   const [watchOpen, setWatchOpen] = useState(false);
-  const rafRef = useRef();
-  const startRef = useRef(null);
-  const lastStatusRef = useRef(null);
-
-  const pickupPath = [DRIVER_START, { x: DRIVER_START.x, y: 78 }, HOME];
-  const tripPath = [HOME, { x: HOME.x, y: 45 }, { x: DEST.x, y: 45 }, DEST];
 
   useEffect(() => {
     const unsub = subscribeToRide(rideId, (r) => {
@@ -625,49 +658,32 @@ function TrackingScreen({ rideId, destination, onComplete }) {
 
   const status = ride?.status || "accepted";
   const phase = status === "accepted" ? "toPickup" : status === "arrived_pickup" ? "waitingPickup" : "toDest";
-
-  useEffect(() => {
-    if (lastStatusRef.current === phase) return;
-    lastStatusRef.current = phase;
-    setT(0);
-    startRef.current = null;
-  }, [phase]);
-
-  useEffect(() => {
-    if (phase === "waitingPickup") return;
-    const duration = phase === "toPickup" ? 5000 : 6000;
-    const step = (ts) => {
-      if (!startRef.current) startRef.current = ts;
-      const progress = Math.min((ts - startRef.current) / duration, 1);
-      setT(progress);
-      if (progress < 1) rafRef.current = requestAnimationFrame(step);
-    };
-    rafRef.current = requestAnimationFrame(step);
-    return () => cancelAnimationFrame(rafRef.current);
-  }, [phase]);
-
-  const driverPos = phase === "waitingPickup" ? HOME : pointAt(phase === "toDest" ? tripPath : pickupPath, t);
   const statusText = {
     toPickup: "Driver is on the way",
     waitingPickup: "Driver has arrived — hop in",
     toDest: `Heading to ${destination}`,
   }[phase];
 
-  const driverName = ride?.driverName || "Your driver";
-  const carModel = ride?.carModel || "";
+  // Real, live position — reported by the driver's phone, not simulated.
+  const driverPos = ride?.driver_location ? { lat: ride.driver_location.lat, lng: ride.driver_location.lng } : null;
+  const pickupPos = ride?.pickup_location || null;
+  const dropoffPos = ride?.dropoff_location || null;
+
+  const driverName = ride?.driver_name || "Your driver";
+  const carModel = ride?.car_model || "";
   const plate = ride?.plate || "";
 
   return (
     <div className="w-full h-full relative">
-      <CityMap driverPos={driverPos} showRoute={phase !== "toPickup"} />
+      <CityMap driverPos={driverPos} pickupPos={pickupPos} dropoffPos={dropoffPos} showRoute={phase !== "toPickup"} />
       <div className="absolute top-4 left-4 right-4">
-        {ride?.driverRecording && (
+        {ride?.rider_recording && (
           <div className="px-4 py-2.5 rounded-xl flex items-center gap-2 mb-2" style={{ background: "rgba(108,92,231,0.15)", border: `1px solid ${ACCENT}` }}>
             <Shield size={14} color={ACCENT} />
             <span className="text-xs" style={{ color: "#F5F5F0" }}>This trip may be audio recorded for safety</span>
           </div>
         )}
-        {ride?.isFamilyRide && (
+        {ride?.is_family_ride && (
           <button onClick={() => setWatchOpen(true)}
             className="w-full px-4 py-2.5 rounded-xl flex items-center gap-2 mb-2" style={{ background: "#E8547C" }}>
             <Video size={14} color="#fff" />
@@ -739,9 +755,11 @@ export default function RiderApp() {
   const [rideId, setRideId] = useState(null);
   const [finalDriverName, setFinalDriverName] = useState("");
   const [isReturnTrip, setIsReturnTrip] = useState(false);
+  const [pickupPos, setPickupPos] = useState(null);
 
-  const handleConfirmDestination = async (dest, vehicleType, finalFare, isFamilyRide, paymentMethod) => {
+  const handleConfirmDestination = async (dest, vehicleType, finalFare, isFamilyRide, paymentMethod, pickupLoc, dropoffLoc) => {
     setDestination(dest);
+    setPickupPos(pickupLoc || null);
     const trip = seededTrip(dest);
 
     const rideData = {
@@ -751,6 +769,8 @@ export default function RiderApp() {
       isFamilyRide: !!isFamilyRide,
       riderRecording: !!user.audioRecordingEnabled,
       paymentMethod: paymentMethod || "card",
+      pickupLocation: pickupLoc ? { lat: pickupLoc.lat, lng: pickupLoc.lng } : null,
+      dropoffLocation: dropoffLoc ? { lat: dropoffLoc.lat, lng: dropoffLoc.lng } : null,
     };
 
     let id;
@@ -768,8 +788,8 @@ export default function RiderApp() {
     setScreen("finding");
   };
 
-  const handleAccepted = (ride) => { setFinalDriverName(ride.driverName || ""); setScreen("tracking"); };
-  const handleComplete = (ride) => { setFinalDriverName(ride.driverName || ""); setScreen("complete"); };
+  const handleAccepted = (ride) => { setFinalDriverName(ride.driver_name || ""); setScreen("tracking"); };
+  const handleComplete = (ride) => { setFinalDriverName(ride.driver_name || ""); setScreen("complete"); };
   const handleRequestReturn = () => { setIsReturnTrip(true); setScreen("destination"); };
 
   if (!user) {
@@ -788,7 +808,7 @@ export default function RiderApp() {
       {screen === "myplan" && <MyPlanScreen user={user} onBack={() => setScreen("home")} />}
       {screen === "safety" && <SafetyToolkitScreen user={user} onBack={() => setScreen("home")} onUpdateUser={setUser} />}
       {screen === "destination" && <DestinationScreen onBack={() => setScreen(isReturnTrip ? "complete" : "home")} onConfirm={handleConfirmDestination} isReturnTrip={isReturnTrip} />}
-      {screen === "finding" && <FindingDriverScreen rideId={rideId} destination={destination} onAccepted={handleAccepted} onCancelled={() => setScreen("home")} />}
+      {screen === "finding" && <FindingDriverScreen rideId={rideId} destination={destination} pickupPos={pickupPos} onAccepted={handleAccepted} onCancelled={() => setScreen("home")} />}
       {screen === "tracking" && <TrackingScreen rideId={rideId} destination={destination} onComplete={handleComplete} />}
       {screen === "complete" && <CompleteScreen destination={destination} driverName={finalDriverName} onDone={() => setScreen("home")} onRequestReturn={handleRequestReturn} />}
     </div>
