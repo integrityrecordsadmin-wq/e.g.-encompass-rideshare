@@ -60,7 +60,25 @@ async function geocodeAddress(query) {
   const [lng, lat] = feature.center;
   return { lat, lng, placeName: feature.place_name };
 }
+const [siteEnabled, setSiteEnabled] = useState(true);
+const [checkingSite, setCheckingSite] = useState(true);
 
+useEffect(() => {
+  getSiteSettings().then(s => {
+    setSiteEnabled(s.site_enabled);
+    setCheckingSite(false);
+  });
+}, []);
+
+if (checkingSite) return <div>Loading...</div>;
+if (!siteEnabled) {
+  return (
+    <div style={{textAlign: 'center', padding: '60px 20px'}}>
+      <h2>Encompass Rideshare</h2>
+      <p>We're temporarily unavailable right now. Check back soon.</p>
+    </div>
+  );
+}
 // Real driving distance + time between two real coordinates, via Mapbox's
 // Directions API — actual roads, not a straight line or a guess.
 async function getDrivingRoute(pickup, dropoff) {
