@@ -153,11 +153,18 @@ function AuthScreen({ onAuthed }) {
 // ---------- Safety Toolkit ----------
 function SafetyToolkitScreen({ user, onBack, onUpdateUser }) {
   const [enabled, setEnabled] = useState(!!user.audioRecordingEnabled);
+  const [videoEnabled, setVideoEnabled] = useState(!!user.videoRecordingEnabled);
   const toggle = async () => {
     const next = !enabled;
     setEnabled(next);
     await updateRiderProfile(user.uid, { audioRecordingEnabled: next });
     onUpdateUser({ ...user, audioRecordingEnabled: next });
+  };
+  const toggleVideo = async () => {
+    const next = !videoEnabled;
+    setVideoEnabled(next);
+    await updateRiderProfile(user.uid, { videoRecordingEnabled: next });
+    onUpdateUser({ ...user, videoRecordingEnabled: next });
   };
   return (
     <div className="w-full h-full flex flex-col" style={{ background: "#F5F5F0" }}>
@@ -167,7 +174,7 @@ function SafetyToolkitScreen({ user, onBack, onUpdateUser }) {
         </button>
         <h2 className="text-base font-semibold" style={{ color: "#111318" }}>Safety Toolkit</h2>
       </div>
-      <div className="px-4 mt-4">
+      <div className="px-4 mt-4 space-y-3">
         <div className="rounded-2xl p-4" style={{ background: "#fff", border: "1px solid #E4E2D9" }}>
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: `${ACCENT}22` }}>
@@ -184,7 +191,23 @@ function SafetyToolkitScreen({ user, onBack, onUpdateUser }) {
             </button>
           </div>
         </div>
-        <div className="mt-4 space-y-3 text-xs" style={{ color: "#7A7F8A" }}>
+        <div className="rounded-2xl p-4" style={{ background: "#fff", border: "1px solid #E4E2D9" }}>
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-full flex items-center justify-center" style={{ background: `${AMBER}22` }}>
+              <Video size={18} color={AMBER} />
+            </div>
+            <div className="flex-1">
+              <p className="text-sm font-semibold" style={{ color: "#111318" }}>Video recording</p>
+              <p className="text-xs mt-0.5" style={{ color: "#7A7F8A" }}>Record trip video on your device for safety</p>
+            </div>
+            <button onClick={toggleVideo}
+              className="w-12 h-7 rounded-full flex items-center px-0.5 transition"
+              style={{ background: videoEnabled ? AMBER : "#D8D6CE", justifyContent: videoEnabled ? "flex-end" : "flex-start" }}>
+              <span className="w-6 h-6 rounded-full bg-white block" />
+            </button>
+          </div>
+        </div>
+        <div className="mt-1 space-y-3 text-xs" style={{ color: "#7A7F8A" }}>
           <p>When on, your trips are recorded on your own device — not on a server, not visible to your driver or anyone else.</p>
           <p>Recordings stay locked. Only you can choose to submit one if you report a safety issue.</p>
           <p>Your driver will see a notice that recording may be on for a trip. In some states, both sides must be notified before recording.</p>
@@ -732,9 +755,9 @@ function TrackingScreen({ rideId, destination, onComplete }) {
       <CityMap driverPos={driverPos} pickupPos={pickupPos} dropoffPos={dropoffPos} showRoute={phase !== "toPickup"} />
       <div className="absolute top-4 left-4 right-4">
         {ride?.rider_recording && (
-          <div className="px-4 py-2.5 rounded-xl flex items-center gap-2 mb-2" style={{ background: "rgba(108,92,231,0.15)", border: `1px solid ${ACCENT}` }}>
-            <Shield size={14} color={ACCENT} />
-            <span className="text-xs" style={{ color: "#F5F5F0" }}>This trip may be audio recorded for safety</span>
+          <div className="px-4 py-2.5 rounded-xl flex items-center gap-2 mb-2" style={{ background: ACCENT, border: `1px solid ${ACCENT}` }}>
+            <Shield size={14} color="#F5F5F0" />
+            <span className="text-xs font-semibold" style={{ color: "#F5F5F0" }}>This trip may be audio recorded for safety</span>
           </div>
         )}
         {ride?.is_family_ride && (
