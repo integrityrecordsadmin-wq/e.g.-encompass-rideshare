@@ -947,10 +947,37 @@ export default function RiderApp() {
     } catch (err) {
       alert("Couldn't request your ride: " + (err.message || "unknown error"));
       return;
+    
+        let id;
+    try {
+      id = await createRide(rideData);
+    } catch (err) {
+      alert("Couldn't request your ride: " + (err.message || "unknown error"));
+      return;
     }
     if (isFamilyRide) {
       try { await createFamilyRideRoom(id); } catch (e) { /* room creation failed — trip still proceeds without video */ }
     }
+
+    if (paymentMethod === "card") {
+      try {
+        const res = await fetch("/api/create-payment-link", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ fare: finalFare, destination: dest, rideId: id }),
+        });
+        const data = await res.json();
+        if (data.url) {
+          window.location.href = data.url;
+          return;
+        } else {
+          alert("Couldn't set up card payment — proceeding with ride, please pay driver directly.");
+        }
+      } catch (err) {
+        alert("Couldn't set up card payment — proceeding with ride, please pay driver directly.");
+      }
+    }
+
     setRideId(id);
     setIsReturnTrip(false);
     setScreen("finding");
