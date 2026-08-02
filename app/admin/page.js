@@ -731,3 +731,41 @@ export default function AdminPage() {
   if (!admin) return <AdminAuthScreen onAuthed={setAdmin} />;
   return <AdminDashboard />;
 }
+function ResetDataCard() {
+  const [confirmText, setConfirmText] = useState("");
+  const [busy, setBusy] = useState(false);
+  const [done, setDone] = useState("");
+
+  const handleReset = async () => {
+    if (confirmText !== "DELETE") return;
+    setBusy(true);
+    try {
+      await resetAllDriverEarnings();
+      await deleteAllRides();
+      setDone("Cleared driver earnings and ride history.");
+      setConfirmText("");
+    } catch (err) {
+      alert("Couldn't clear data: " + (err.message || "unknown error"));
+    }
+    setBusy(false);
+  };
+
+  return (
+    <div className="rounded-2xl p-4 mb-6" style={{ background: CARD, border: "1px solid #6B2E2E" }}>
+      <p className="text-sm font-semibold" style={{ color: "#FF8A8A" }}>Reset test data</p>
+      <p className="text-xs mt-1 mb-3" style={{ color: MUTED }}>
+        Clears all driver earnings totals and deletes all ride history. This cannot be undone.
+      </p>
+      <input value={confirmText} onChange={(e) => setConfirmText(e.target.value)}
+        placeholder='Type "DELETE" to confirm'
+        className="w-full px-3 py-2 rounded-lg text-sm outline-none mb-2"
+        style={{ background: BG, color: TEXT, border: `1px solid ${BORDER}` }} />
+      <button disabled={busy || confirmText !== "DELETE"} onClick={handleReset}
+        className="w-full py-2.5 rounded-lg text-sm font-medium disabled:opacity-40"
+        style={{ background: "#3D1F1F", color: "#FF6B6B" }}>
+        {busy ? "Clearing…" : "Clear all ride & earnings data"}
+      </button>
+      {done && <p className="text-xs mt-2" style={{ color: "#4ADE80" }}>{done}</p>}
+    </div>
+  );
+                          }
