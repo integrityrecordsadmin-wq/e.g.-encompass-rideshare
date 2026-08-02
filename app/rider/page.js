@@ -972,7 +972,7 @@ export default function RiderApp() {
     }
 
     setRideId(id);
-    setIsReturnTrip(false); I
+    setIsReturnTrip(false);
     setScreen("finding");
   };
 
