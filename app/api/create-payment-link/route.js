@@ -8,7 +8,7 @@ export async function POST(request) {
 
     const amountInCents = Math.round(fare * 100);
 
-    const res = await fetch("https://connect.squareupsandbox.com/v2/online-checkout/payment-links", {
+    const res = await fetch("https://connect.squareup.com/v2/online-checkout/payment-links", {
       method: "POST",
       headers: {
         "Square-Version": "2024-06-20",
