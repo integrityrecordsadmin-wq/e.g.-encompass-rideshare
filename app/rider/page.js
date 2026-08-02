@@ -966,6 +966,9 @@ export default function RiderApp() {
         } else {
           alert("Payment setup failed: " + (data.error || "unknown reason") + " — proceeding with ride, please pay driver directly.");
         }
+      } catch (err) {
+        alert("Couldn't set up card payment — proceeding with ride, please pay driver directly.");
+      }
     }
 
     setRideId(id);
