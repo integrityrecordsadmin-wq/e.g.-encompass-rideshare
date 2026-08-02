@@ -35,7 +35,7 @@ export async function POST(request) {
 
     if (!res.ok) {
       console.error("Square error:", data);
-      return Response.json({ error: "Couldn't create payment link" }, { status: 500 });
+      return Response.json({ error: data.errors?.[0]?.detail || "Couldn't create payment link" }, { status: 500 });
     }
 
     return Response.json({ url: data.payment_link.url });
