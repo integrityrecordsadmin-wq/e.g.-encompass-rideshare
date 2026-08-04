@@ -72,11 +72,20 @@ function HotelBookingForm({ onBooked }) {
   const [tripError, setTripError] = useState("");
   const [confirming, setConfirming] = useState(false);
   const [confirmError, setConfirmError] = useState("");
+  const [captchaAnswer, setCaptchaAnswer] = useState("");
+  const [captchaNums] = useState(() => ({
+    a: Math.floor(Math.random() * 8) + 2,
+    b: Math.floor(Math.random() * 8) + 2,
+  }));
 
   const selectedHotel = hotelIndex !== "" ? HOTELS[hotelIndex] : null;
   const selectedVehicle = VEHICLE_TYPES.find((v) => v.id === vehicle);
   const baseFare = realTrip ? fareForTrip(realTrip.miles, realTrip.minutes) : 0;
   const finalFare = baseFare * selectedVehicle.multiplier;
+
+  const phonePattern = /^[\d\s\-\(\)\+]{10,}$/;
+  const phoneValid = phonePattern.test(phone.trim());
+  const captchaValid = Number(captchaAnswer) === captchaNums.a + captchaNums.b;
 
   // Once a hotel is picked, geocode its address to get real pickup coordinates.
   useEffect(() => {
@@ -114,19 +123,19 @@ function HotelBookingForm({ onBooked }) {
     return () => { cancelled = true; clearTimeout(timer); };
   }, [dest, pickupLoc]);
 
-  const canConfirm = name.trim() && phone.trim() && selectedHotel && pickupLoc && dest.trim() && !!realTrip && !confirming;
+  const canConfirm = name.trim() && phoneValid && selectedHotel && pickupLoc && dest.trim() && !!realTrip && captchaValid && !confirming;
 
   const handleConfirm = async () => {
     setConfirmError("");
     if (!canConfirm) {
-      setConfirmError("Fill in your name, phone, hotel, and destination first.");
+      setConfirmError("Fill in your name, a valid phone number, hotel, destination, and the answer above.");
       return;
     }
     setConfirming(true);
 
     const rideData = {
       riderName: name.trim(),
-      riderUid: `guest-${crypto.randomUUID()}`,
+      riderUid: crypto.randomUUID(),
       destination: dest.trim(),
       fare: finalFare,
       miles: realTrip?.miles || 0,
@@ -185,6 +194,9 @@ function HotelBookingForm({ onBooked }) {
             name="phone" autoComplete="tel"
             className="w-full px-4 py-3.5 rounded-xl text-base outline-none"
             style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
+          {phone.trim() && !phoneValid && (
+            <p className="text-xs" style={{ color: "#FF6B6B" }}>Enter a valid phone number (10+ digits).</p>
+          )}
           <select value={hotelIndex} onChange={(e) => setHotelIndex(e.target.value)}
             className="w-full px-4 py-3.5 rounded-xl text-base outline-none"
             style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }}>
@@ -242,6 +254,18 @@ function HotelBookingForm({ onBooked }) {
                 <p className="text-xl font-semibold" style={{ color: ACCENT }}>${finalFare.toFixed(2)}</p>
               </div>
             </>
+          )}
+
+          {realTrip && (
+            <div>
+              <label className="text-xs" style={{ color: "#7A7F8A" }}>
+                Quick check: what's {captchaNums.a} + {captchaNums.b}?
+              </label>
+              <input value={captchaAnswer} onChange={(e) => setCaptchaAnswer(e.target.value)}
+                inputMode="numeric" placeholder="Your answer"
+                className="w-full mt-1 px-4 py-3 rounded-xl text-base outline-none"
+                style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
+            </div>
           )}
 
           {confirmError && <p className="text-sm" style={{ color: "#FF6B6B" }}>{confirmError}</p>}
