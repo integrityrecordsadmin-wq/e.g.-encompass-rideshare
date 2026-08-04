@@ -1,7 +1,7 @@
 "use client";
 import { useState, useEffect, useRef } from "react";
 import {
-  Navigation, User, Car, Clock, Check, X, Star, Power, DollarSign, MapPin, Shield, Mic, Video, ChevronLeft, MessageCircle, BarChart3,
+  Navigation, User, Car, Clock, Check, X, Star, Power, DollarSign, MapPin, Shield, Mic, Video, ChevronLeft, MessageCircle, BarChart3, Lock, Unlock,
 } from "lucide-react";
 import CityMap from "../../components/CityMap";
 import ChatPanel from "../../components/ChatPanel";
@@ -96,6 +96,7 @@ function DriverAuthScreen({ onAuthed }) {
         </div>
         <form onSubmit={submitVehicleInfo} className="space-y-3">
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Full name"
+            name="name" autoComplete="name"
             className="w-full px-4 py-3.5 rounded-xl text-base outline-none"
             style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
           <div className="flex gap-3">
@@ -150,12 +151,18 @@ function DriverAuthScreen({ onAuthed }) {
         <h1 className="text-3xl font-semibold tracking-tight" style={{ color: "#F5F5F0" }}>Welcome, driver</h1>
         <p className="mt-1 text-sm" style={{ color: "#7A7F8A" }}>Sign in to go online.</p>
       </div>
-      {error && <p className="text-sm" style={{ color: "#FF6B6B" }}>{error}</p>}
-      <button type="button" onClick={handleSendMagicLink} disabled={busy}
-        className="w-full py-3.5 rounded-xl font-medium text-base mt-1 transition active:scale-[0.98]"
-        style={{ background: ACCENT, color: "#111318" }}>
-        {busy ? "One sec…" : "Encompass Rideshare"}
-      </button>
+      <div className="space-y-3">
+        <input value={email} onChange={(e) => setEmail(e.target.value)} placeholder="Email" type="email"
+          name="email" autoComplete="email"
+          className="w-full px-4 py-3.5 rounded-xl text-base outline-none"
+          style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
+        {error && <p className="text-sm" style={{ color: "#FF6B6B" }}>{error}</p>}
+        <button type="button" onClick={handleSendMagicLink} disabled={busy}
+          className="w-full py-3.5 rounded-xl font-medium text-base mt-1 transition active:scale-[0.98]"
+          style={{ background: ACCENT, color: "#111318" }}>
+          {busy ? "One sec…" : "Encompass Rideshare"}
+        </button>
+      </div>
       <button type="button" onClick={() => setShowHelp((s) => !s)}
         className="mt-6 text-sm text-center font-medium" style={{ color: ACCENT }}>
         Trouble signing in?
@@ -300,47 +307,11 @@ function playChime() {
   } catch (e) {}
 }
 
-function DriverHomeScreen({ driver, online, setOnline, onProfile, onIncomingRide, onSafety, onEarnings }) {
+function DriverHomeScreen({ driver, online, setOnline, screenLockEnabled, setScreenLockEnabled, onProfile, onIncomingRide, onSafety, onEarnings }) {
   useEffect(() => {
     if (!online) return;
     const unsub = subscribeToNextPendingRide(driver.vehicleType, (ride) => onIncomingRide(ride));
     return unsub;
-  }, [online]);
-
-  useEffect(() => {
-    let wakeLock = null;
-    const requestWakeLock = async () => {
-      try {
-        if ("wakeLock" in navigator) {
-          wakeLock = await navigator.wakeLock.request("screen");
-        }
-      } catch (err) {
-        console.log("Wake lock failed:", err.message);
-      }
-    };
-
-    const releaseWakeLock = async () => {
-      if (wakeLock) {
-        try { await wakeLock.release(); } catch (e) {}
-        wakeLock = null;
-      }
-    };
-
-    if (online) {
-      requestWakeLock();
-    }
-
-    const handleVisibilityChange = () => {
-      if (online && document.visibilityState === "visible") {
-        requestWakeLock();
-      }
-    };
-    document.addEventListener("visibilitychange", handleVisibilityChange);
-
-    return () => {
-      document.removeEventListener("visibilitychange", handleVisibilityChange);
-      releaseWakeLock();
-    };
   }, [online]);
 
   const [myPos, setMyPos] = useState(null);
@@ -386,6 +357,11 @@ function DriverHomeScreen({ driver, online, setOnline, onProfile, onIncomingRide
           <span>${(driver.earningsToday || 0).toFixed(2)} today</span>
         </div>
         <div className="flex gap-2">
+          <button onClick={() => setScreenLockEnabled((s) => !s)} aria-label="Keep screen awake"
+            className="w-10 h-10 rounded-full flex items-center justify-center"
+            style={{ background: "rgba(17,19,24,0.85)", border: "1px solid #2B2F3A" }}>
+            {screenLockEnabled ? <Lock size={17} color={ACCENT} /> : <Unlock size={17} color="#7A7F8A" />}
+          </button>
           <button onClick={onEarnings} aria-label="Earnings" className="w-10 h-10 rounded-full flex items-center justify-center"
             style={{ background: "rgba(17,19,24,0.85)", border: "1px solid #2B2F3A" }}>
             <BarChart3 size={17} color="#F5F5F0" />
@@ -691,7 +667,7 @@ function TripScreen({ ride, driver, onComplete }) {
           </button>
         </div>
         {(phase === "toPickup" || phase === "toDropoff") && (
-          <a href={wazeNavigateUrl(phase === "toPickup" ? `Pickup for ${ride.rider_name}` : ride.destination)}
+          <a href={wazeNavigateUrl(phase === "toPickup" ? `${pickupPos.lat},${pickupPos.lng}` : ride.destination)}
             target="_blank" rel="noopener noreferrer"
             className="w-full mb-2.5 py-3.5 rounded-xl font-medium text-base flex items-center justify-center gap-2"
             style={{ background: "#111318", color: "#F5F5F0" }}>
@@ -980,6 +956,7 @@ function VehicleInfoGateScreen({ driver, onComplete }) {
             style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
         </div>
         <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone number" type="tel"
+          name="phone" autoComplete="tel"
           className="w-full px-4 py-3.5 rounded-xl text-base outline-none"
           style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
         <p className="text-xs -mt-1" style={{ color: "#7A7F8A" }}>Kept private — never shown directly to riders.</p>
@@ -1038,12 +1015,75 @@ export default function DriverApp() {
   const [lastFare, setLastFare] = useState(0);
   const [siteEnabled, setSiteEnabled] = useState(true);
   const [checkingSite, setCheckingSite] = useState(true);
+  const [showExitToast, setShowExitToast] = useState(false);
+  const [screenLockEnabled, setScreenLockEnabled] = useState(true);
+  const exitConfirmRef = useRef(false);
 
   useEffect(() => {
     getSiteSettings().then((s) => {
       setSiteEnabled(s.site_enabled);
       setCheckingSite(false);
     });
+  }, []);
+
+  // Keeps the screen from sleeping while online or on an active trip — lives
+  // at the root so it survives navigating between Home, Trip, and other
+  // screens, instead of resetting whenever the driver's view changes.
+  useEffect(() => {
+    let wakeLock = null;
+    const shouldLock = screenLockEnabled && (online || !!activeRide);
+
+    const requestWakeLock = async () => {
+      try {
+        if ("wakeLock" in navigator) {
+          wakeLock = await navigator.wakeLock.request("screen");
+        }
+      } catch (err) {
+        console.log("Wake lock failed:", err.message);
+      }
+    };
+
+    const releaseWakeLock = async () => {
+      if (wakeLock) {
+        try { await wakeLock.release(); } catch (e) {}
+        wakeLock = null;
+      }
+    };
+
+    if (shouldLock) {
+      requestWakeLock();
+    }
+
+    const handleVisibilityChange = () => {
+      if (shouldLock && document.visibilityState === "visible") {
+        requestWakeLock();
+      }
+    };
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      releaseWakeLock();
+    };
+  }, [online, activeRide, screenLockEnabled]);
+
+  // Guards against an accidental swipe/back gesture closing the whole app —
+  // first back press just shows a "tap again to exit" message instead of exiting.
+  useEffect(() => {
+    window.history.pushState(null, "", window.location.href);
+    const handlePopState = () => {
+      if (!exitConfirmRef.current) {
+        exitConfirmRef.current = true;
+        setShowExitToast(true);
+        window.history.pushState(null, "", window.location.href);
+        setTimeout(() => {
+          exitConfirmRef.current = false;
+          setShowExitToast(false);
+        }, 2000);
+      }
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
   const handleIncomingRide = (ride) => { setActiveRide(ride); setScreen("request"); };
@@ -1122,6 +1162,7 @@ export default function DriverApp() {
       style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.4)" }}>
       {screen === "home" && (
         <DriverHomeScreen driver={driver} online={online} setOnline={setOnline}
+          screenLockEnabled={screenLockEnabled} setScreenLockEnabled={setScreenLockEnabled}
           onProfile={() => setScreen("profile")}
           onIncomingRide={handleIncomingRide} onSafety={() => setScreen("safety")} onEarnings={() => setScreen("earningsHub")} />
       )}
@@ -1135,6 +1176,12 @@ export default function DriverApp() {
       {screen === "request" && activeRide && <IncomingRequestScreen ride={activeRide} onAccept={handleAccept} onDecline={handleDecline} />}
       {screen === "trip" && activeRide && <TripScreen ride={activeRide} driver={driver} onComplete={handleComplete} />}
       {screen === "earnings" && <EarningsScreen fare={lastFare} onDone={() => setScreen("home")} />}
+      {showExitToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full text-sm z-50"
+          style={{ background: "rgba(17,19,24,0.9)", color: "#F5F5F0" }}>
+          Tap back again to exit
+        </div>
+      )}
     </div>
   );
 }
