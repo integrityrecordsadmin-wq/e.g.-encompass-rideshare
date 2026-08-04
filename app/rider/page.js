@@ -16,7 +16,7 @@ import {
   signUpRider, loginRider, signOut, updateRiderProfile,
   createRide, subscribeToRide, resetPassword, createFamilyRideRoom, getOnlineDriverTokens,
   startGoogleSignIn, completeGoogleSignInRider, sendMagicLinkRider, completeMagicLinkSignInRider,
-  getRiderFlatratePlan, getSiteSettings,
+  getRiderFlatratePlan, getSiteSettings, getPendingBooking,
 } from "../../lib/supabase-db";
 const QUICK_REPLIES_RIDER = ["I'm outside", "On my way down", "Running 2 min late", "Thank you!"];
 
@@ -963,6 +963,8 @@ export default function RiderApp() {
   const [siteEnabled, setSiteEnabled] = useState(true);
   const [checkingSite, setCheckingSite] = useState(true);
   const [showExitToast, setShowExitToast] = useState(false);
+  const [confirmingPayment, setConfirmingPayment] = useState(false);
+  const [paymentConfirmError, setPaymentConfirmError] = useState("");
   const exitConfirmRef = useRef(false);
 
   useEffect(() => {
@@ -972,44 +974,39 @@ export default function RiderApp() {
     });
   }, []);
 
-  // Runs once on load. If Square just sent the rider back here after a
-  // successful payment, the ride is created RIGHT NOW — not before — so a
-  // driver can never see or accept a ride that hasn't actually been paid for.
+  // Runs once on load. If Square just sent the rider back here, we do NOT
+  // trust the URL alone (that could be faked by just typing it in) — we poll
+  // the pending_bookings row, which only gets a ride_id once our webhook has
+  // independently verified the payment with Square and created the ride.
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get("payment") !== "success") return;
+    const token = params.get("token");
+    if (params.get("payment") !== "pending" || !token) return;
 
-    const rideData = {
-      riderName: params.get("riderName") || "Rider",
-      riderUid: params.get("riderUid") || crypto.randomUUID(),
-      destination: params.get("destination") || "",
-      fare: Number(params.get("fare")) || 0,
-      miles: Number(params.get("miles")) || 0,
-      minutes: Number(params.get("minutes")) || 0,
-      vehicleType: params.get("vehicleType") || "standard",
-      isFamilyRide: params.get("isFamilyRide") === "1",
-      riderRecording: params.get("riderRecording") === "1",
-      paymentMethod: "card",
-      pickupLocation: params.get("pickupLat") ? { lat: Number(params.get("pickupLat")), lng: Number(params.get("pickupLng")) } : null,
-      dropoffLocation: params.get("dropoffLat") ? { lat: Number(params.get("dropoffLat")), lng: Number(params.get("dropoffLng")) } : null,
-    };
+    window.history.replaceState({}, "", "/rider");
+    setConfirmingPayment(true);
 
-    (async () => {
-      try {
-        const id = await createRide(rideData);
-        if (rideData.isFamilyRide) {
-          try { await createFamilyRideRoom(id); } catch (e) { /* proceeds without video */ }
-        }
-        setDestination(rideData.destination);
-        setPickupPos(rideData.pickupLocation);
-        setRideId(id);
+    let attempts = 0;
+    const maxAttempts = 20; // ~30 seconds total
+    const poll = async () => {
+      attempts++;
+      const booking = await getPendingBooking(token);
+      if (booking?.ride_id) {
+        setDestination(booking.ride_data?.destination || "");
+        setPickupPos(booking.ride_data?.pickupLocation || null);
+        setRideId(booking.ride_id);
         setScreen("finding");
-      } catch (err) {
-        alert("Payment succeeded, but couldn't create your ride: " + (err.message || "unknown error") + ". Please contact support.");
+        setConfirmingPayment(false);
+        return;
       }
-      // Clean the query params out of the URL so a refresh doesn't re-book.
-      window.history.replaceState({}, "", "/rider");
-    })();
+      if (attempts >= maxAttempts) {
+        setConfirmingPayment(false);
+        setPaymentConfirmError("Confirming your payment is taking longer than expected. If you were charged, your ride will appear shortly — otherwise use the Call or Telegram button on the home screen.");
+        return;
+      }
+      setTimeout(poll, 1500);
+    };
+    poll();
   }, []);
 
   // Guards against an accidental swipe/back gesture closing the whole app —
@@ -1103,6 +1100,23 @@ export default function RiderApp() {
     return (
       <div className="w-full h-screen max-w-sm mx-auto flex items-center justify-center" style={{ background: "#111318" }}>
         <p style={{ color: "#7A7F8A" }}>Loading…</p>
+      </div>
+    );
+  }
+
+  if (confirmingPayment) {
+    return (
+      <div className="w-full h-screen max-w-sm mx-auto flex flex-col items-center justify-center px-8 text-center" style={{ background: "#111318" }}>
+        <div className="w-6 h-6 rounded-full border-2 animate-spin mb-4" style={{ borderColor: ACCENT, borderTopColor: "transparent" }} />
+        <p style={{ color: "#F5F5F0" }}>Confirming your payment…</p>
+      </div>
+    );
+  }
+
+  if (paymentConfirmError) {
+    return (
+      <div className="w-full h-screen max-w-sm mx-auto flex flex-col items-center justify-center px-8 text-center" style={{ background: "#111318" }}>
+        <p className="text-sm" style={{ color: "#FF6B6B" }}>{paymentConfirmError}</p>
       </div>
     );
   }
