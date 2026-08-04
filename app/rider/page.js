@@ -2,7 +2,7 @@
 import { useState, useEffect, useRef } from "react";
 import {
   MapPin, Navigation, Search, User, Car, Clock, ChevronLeft, Check, Shield, Mic, X, MessageCircle,
-  Heart, Video, ShieldCheck, Star as StarIcon,
+  Heart, Video, ShieldCheck, Star as StarIcon, Phone, Send,
 } from "lucide-react";
 import CityMap from "../../components/CityMap";
 import ChatPanel from "../../components/ChatPanel";
@@ -410,6 +410,23 @@ function HomeScreen({ user, onRequest, onLogout, onSafety, onMyPlan }) {
               <span className="text-sm" style={{ color: "#111318" }}>{place}</span>
             </button>
           ))}
+        </div>
+        <div className="mt-5">
+          <p className="text-xs uppercase tracking-wide mb-2" style={{ color: "#9A9890" }}>Need to reach us?</p>
+          <div className="flex gap-2">
+            <a href="tel:+14697278259"
+              className="flex-1 flex flex-col items-center gap-1 py-3 rounded-xl"
+              style={{ background: "#EDEBE2" }}>
+              <Phone size={18} color={ACCENT} />
+              <span className="text-xs font-medium" style={{ color: "#111318" }}>Call</span>
+            </a>
+            <a href="https://t.me/Chris" target="_blank" rel="noopener noreferrer"
+              className="flex-1 flex flex-col items-center gap-1 py-3 rounded-xl"
+              style={{ background: "#EDEBE2" }}>
+              <Send size={18} color={ACCENT} />
+              <span className="text-xs font-medium" style={{ color: "#111318" }}>Telegram</span>
+            </a>
+          </div>
         </div>
       </div>
     </div>
@@ -893,6 +910,7 @@ function PhoneGateScreen({ user, onComplete }) {
       </div>
       <form onSubmit={submit} className="space-y-3">
         <input value={phone} onChange={(e) => setPhone(e.target.value)} placeholder="Phone number" type="tel"
+          name="phone" autoComplete="tel"
           className="w-full px-4 py-3.5 rounded-xl text-base outline-none"
           style={{ background: "#1D2028", color: "#F5F5F0", border: "1px solid #2B2F3A" }} />
         <p className="text-xs" style={{ color: "#7A7F8A" }}>Kept private — never shown directly to your driver.</p>
@@ -918,12 +936,33 @@ export default function RiderApp() {
   const [pickupPos, setPickupPos] = useState(null);
   const [siteEnabled, setSiteEnabled] = useState(true);
   const [checkingSite, setCheckingSite] = useState(true);
+  const [showExitToast, setShowExitToast] = useState(false);
+  const exitConfirmRef = useRef(false);
 
   useEffect(() => {
     getSiteSettings().then((s) => {
       setSiteEnabled(s.site_enabled);
       setCheckingSite(false);
     });
+  }, []);
+
+  // Guards against an accidental swipe/back gesture closing the whole app —
+  // first back press just shows a "tap again to exit" message instead of exiting.
+  useEffect(() => {
+    window.history.pushState(null, "", window.location.href);
+    const handlePopState = () => {
+      if (!exitConfirmRef.current) {
+        exitConfirmRef.current = true;
+        setShowExitToast(true);
+        window.history.pushState(null, "", window.location.href);
+        setTimeout(() => {
+          exitConfirmRef.current = false;
+          setShowExitToast(false);
+        }, 2000);
+      }
+    };
+    window.addEventListener("popstate", handlePopState);
+    return () => window.removeEventListener("popstate", handlePopState);
   }, []);
 
   const handleConfirmDestination = async (dest, vehicleType, finalFare, isFamilyRide, paymentMethod, pickupLoc, dropoffLoc, realTrip) => {
@@ -964,7 +1003,7 @@ export default function RiderApp() {
           window.location.href = data.url;
           return;
         } else {
-          alert("Payment setup failed: " + (data.error || "unknown reason") + " — proceeding with ride, please pay driver directly.");
+          alert("Couldn't set up card payment — proceeding with ride, please pay driver directly.");
         }
       } catch (err) {
         alert("Couldn't set up card payment — proceeding with ride, please pay driver directly.");
@@ -1026,6 +1065,12 @@ export default function RiderApp() {
       {screen === "finding" && <FindingDriverScreen rideId={rideId} destination={destination} pickupPos={pickupPos} onAccepted={handleAccepted} onCancelled={() => setScreen("home")} />}
       {screen === "tracking" && <TrackingScreen rideId={rideId} destination={destination} user={user} onComplete={handleComplete} />}
       {screen === "complete" && <CompleteScreen destination={destination} driverName={finalDriverName} onDone={() => setScreen("home")} onRequestReturn={handleRequestReturn} />}
+      {showExitToast && (
+        <div className="fixed bottom-6 left-1/2 -translate-x-1/2 px-4 py-2 rounded-full text-sm z-50"
+          style={{ background: "rgba(17,19,24,0.9)", color: "#F5F5F0" }}>
+          Tap back again to exit
+        </div>
+      )}
     </div>
   );
 }
