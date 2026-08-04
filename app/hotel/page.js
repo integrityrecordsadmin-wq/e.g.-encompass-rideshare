@@ -133,37 +133,23 @@ function HotelBookingForm({ onBooked }) {
     }
     setConfirming(true);
 
-    const rideData = {
-      riderName: name.trim(),
-      riderUid: crypto.randomUUID(),
-      destination: dest.trim(),
-      fare: finalFare,
-      miles: realTrip?.miles || 0,
-      minutes: realTrip?.minutes || 0,
-      vehicleType: vehicle,
-      isFamilyRide: false,
-      riderRecording: false,
-      paymentMethod: "card",
-      pickupLocation: { lat: pickupLoc.lat, lng: pickupLoc.lng },
-      dropoffLocation: dropoffLoc ? { lat: dropoffLoc.lat, lng: dropoffLoc.lng } : null,
-      guestPhone: phone.trim(),
-      pickupHotel: selectedHotel.name,
-    };
-
-    let id;
-    try {
-      id = await createRide(rideData);
-    } catch (err) {
-      setConfirmError("Couldn't request your ride: " + (err.message || "unknown error"));
-      setConfirming(false);
-      return;
-    }
-
+    // The ride is NOT created here — only after payment succeeds and Square
+    // sends the guest back with these details in the URL. This prevents a
+    // driver from ever seeing/accepting a ride that hasn't been paid for.
     try {
       const res = await fetch("/api/create-payment-link", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ fare: finalFare, destination: dest.trim(), rideId: id }),
+        body: JSON.stringify({
+          riderName: name.trim(), riderUid: crypto.randomUUID(),
+          destination: dest.trim(), fare: finalFare,
+          miles: realTrip?.miles || 0, minutes: realTrip?.minutes || 0,
+          vehicleType: vehicle, isFamilyRide: false, riderRecording: false,
+          pickupLat: pickupLoc.lat, pickupLng: pickupLoc.lng,
+          dropoffLat: dropoffLoc?.lat, dropoffLng: dropoffLoc?.lng,
+          guestPhone: phone.trim(), pickupHotel: selectedHotel.name,
+          returnTo: "/hotel",
+        }),
       });
       const data = await res.json();
       if (data.url) {
@@ -349,17 +335,53 @@ function HotelTrackingScreen({ rideId }) {
 export default function HotelPortal() {
   const [rideId, setRideId] = useState(null);
   const [checkedUrl, setCheckedUrl] = useState(false);
+  const [error, setError] = useState("");
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    const successId = params.get("rideId");
-    if (params.get("payment") === "success" && successId) {
-      setRideId(successId);
+    if (params.get("payment") !== "success") {
+      setCheckedUrl(true);
+      return;
     }
-    setCheckedUrl(true);
+
+    const rideData = {
+      riderName: params.get("riderName") || "Guest",
+      riderUid: params.get("riderUid") || crypto.randomUUID(),
+      destination: params.get("destination") || "",
+      fare: Number(params.get("fare")) || 0,
+      miles: Number(params.get("miles")) || 0,
+      minutes: Number(params.get("minutes")) || 0,
+      vehicleType: params.get("vehicleType") || "standard",
+      isFamilyRide: false,
+      riderRecording: false,
+      paymentMethod: "card",
+      pickupLocation: params.get("pickupLat") ? { lat: Number(params.get("pickupLat")), lng: Number(params.get("pickupLng")) } : null,
+      dropoffLocation: params.get("dropoffLat") ? { lat: Number(params.get("dropoffLat")), lng: Number(params.get("dropoffLng")) } : null,
+      guestPhone: params.get("guestPhone") || "",
+      pickupHotel: params.get("pickupHotel") || "",
+    };
+
+    (async () => {
+      try {
+        const id = await createRide(rideData);
+        setRideId(id);
+      } catch (err) {
+        setError("Payment succeeded, but couldn't create your ride: " + (err.message || "unknown error") + ". Please contact us using the options below.");
+      }
+      window.history.replaceState({}, "", "/hotel");
+      setCheckedUrl(true);
+    })();
   }, []);
 
   if (!checkedUrl) return null;
+
+  if (error) {
+    return (
+      <div className="min-h-screen w-full flex flex-col items-center justify-center px-8 text-center" style={{ background: "#111318" }}>
+        <p className="text-sm" style={{ color: "#FF6B6B" }}>{error}</p>
+      </div>
+    );
+  }
 
   if (rideId) {
     return <HotelTrackingScreen rideId={rideId} />;
