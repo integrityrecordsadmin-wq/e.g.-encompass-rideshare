@@ -373,6 +373,32 @@ function InstallAppButton() {
 }
 
 function HomeScreen({ user, onRequest, onLogout, onSafety, onMyPlan }) {
+  const [pickupAddress, setPickupAddress] = useState("Finding your location…");
+
+  useEffect(() => {
+    if (!("geolocation" in navigator)) {
+      setPickupAddress("Location unavailable");
+      return;
+    }
+    navigator.geolocation.getCurrentPosition(
+      async (pos) => {
+        try {
+          const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
+          const { latitude: lat, longitude: lng } = pos.coords;
+          const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${lng},${lat}.json?access_token=${token}&limit=1`;
+          const res = await fetch(url);
+          const data = await res.json();
+          const place = data.features && data.features[0];
+          setPickupAddress(place ? place.place_name : "Current location");
+        } catch (e) {
+          setPickupAddress("Current location");
+        }
+      },
+      () => setPickupAddress("Enable location services to detect pickup"),
+      { enableHighAccuracy: true, timeout: 10000 }
+    );
+  }, []);
+
   return (
     <div className="relative w-full h-full">
       <div className="absolute inset-0"><CityMap showRoute={false} /></div>
@@ -398,10 +424,10 @@ function HomeScreen({ user, onRequest, onLogout, onSafety, onMyPlan }) {
           <Search size={17} color="#7A7F8A" />
           <span className="text-sm" style={{ color: "#9CA0AA" }}>Enter destination</span>
         </button>
-<button onClick={onMyPlan} className="w-full flex items-center gap-3 px-4 py-3 rounded-xl mt-2"
-  style={{ background: "#EDEBE2" }}>
-  <span style={{ color: "#111318" }}>My Weekly Plan</span>
-</button><InstallAppButton />
+<div className="w-full flex items-center gap-3 px-4 py-3 rounded-xl mt-2" style={{ background: "#EDEBE2" }}>
+  <MapPin size={16} color={ACCENT} />
+  <span className="text-sm truncate" style={{ color: "#111318" }}>{pickupAddress}</span>
+</div><InstallAppButton />
         <div className="mt-5">
           <p className="text-xs uppercase tracking-wide mb-2" style={{ color: "#9A9890" }}>Suggestions</p>
           {["Downtown Office", "The Studio", "Riverside Market"].map((place) => (
