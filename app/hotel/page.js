@@ -5,7 +5,7 @@ import CityMap from "../../components/CityMap";
 import { ACCENT, AMBER } from "../../lib/tokens";
 import { fareForTrip } from "../../lib/fare";
 import { VEHICLE_TYPES } from "../../lib/vehicleTypes";
-import { createRide, subscribeToRide } from "../../lib/supabase-db";
+import { subscribeToRide, getPendingBooking } from "../../lib/supabase-db";
 
 // Hotels in Ennis, TX and Waxahachie, TX — selecting one auto-fills pickup
 // address so guests don't need to know or type their own location.
@@ -339,41 +339,42 @@ export default function HotelPortal() {
 
   useEffect(() => {
     const params = new URLSearchParams(window.location.search);
-    if (params.get("payment") !== "success") {
+    const token = params.get("token");
+    if (params.get("payment") !== "pending" || !token) {
       setCheckedUrl(true);
       return;
     }
 
-    const rideData = {
-      riderName: params.get("riderName") || "Guest",
-      riderUid: params.get("riderUid") || crypto.randomUUID(),
-      destination: params.get("destination") || "",
-      fare: Number(params.get("fare")) || 0,
-      miles: Number(params.get("miles")) || 0,
-      minutes: Number(params.get("minutes")) || 0,
-      vehicleType: params.get("vehicleType") || "standard",
-      isFamilyRide: false,
-      riderRecording: false,
-      paymentMethod: "card",
-      pickupLocation: params.get("pickupLat") ? { lat: Number(params.get("pickupLat")), lng: Number(params.get("pickupLng")) } : null,
-      dropoffLocation: params.get("dropoffLat") ? { lat: Number(params.get("dropoffLat")), lng: Number(params.get("dropoffLng")) } : null,
-      guestPhone: params.get("guestPhone") || "",
-      pickupHotel: params.get("pickupHotel") || "",
-    };
+    window.history.replaceState({}, "", "/hotel");
 
-    (async () => {
-      try {
-        const id = await createRide(rideData);
-        setRideId(id);
-      } catch (err) {
-        setError("Payment succeeded, but couldn't create your ride: " + (err.message || "unknown error") + ". Please contact us using the options below.");
+    let attempts = 0;
+    const maxAttempts = 20; // ~30 seconds total
+    const poll = async () => {
+      attempts++;
+      const booking = await getPendingBooking(token);
+      if (booking?.ride_id) {
+        setRideId(booking.ride_id);
+        setCheckedUrl(true);
+        return;
       }
-      window.history.replaceState({}, "", "/hotel");
-      setCheckedUrl(true);
-    })();
+      if (attempts >= maxAttempts) {
+        setError("Confirming your payment is taking longer than expected. If you were charged, your ride will appear shortly — otherwise use the Call or Telegram button below.");
+        setCheckedUrl(true);
+        return;
+      }
+      setTimeout(poll, 1500);
+    };
+    poll();
   }, []);
 
-  if (!checkedUrl) return null;
+  if (!checkedUrl) {
+    return (
+      <div className="min-h-screen w-full flex flex-col items-center justify-center px-8 text-center" style={{ background: "#111318" }}>
+        <div className="w-6 h-6 rounded-full border-2 animate-spin mb-4" style={{ borderColor: ACCENT, borderTopColor: "transparent" }} />
+        <p style={{ color: "#F5F5F0" }}>Confirming your payment…</p>
+      </div>
+    );
+  }
 
   if (error) {
     return (
