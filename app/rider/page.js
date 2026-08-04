@@ -972,6 +972,46 @@ export default function RiderApp() {
     });
   }, []);
 
+  // Runs once on load. If Square just sent the rider back here after a
+  // successful payment, the ride is created RIGHT NOW — not before — so a
+  // driver can never see or accept a ride that hasn't actually been paid for.
+  useEffect(() => {
+    const params = new URLSearchParams(window.location.search);
+    if (params.get("payment") !== "success") return;
+
+    const rideData = {
+      riderName: params.get("riderName") || "Rider",
+      riderUid: params.get("riderUid") || crypto.randomUUID(),
+      destination: params.get("destination") || "",
+      fare: Number(params.get("fare")) || 0,
+      miles: Number(params.get("miles")) || 0,
+      minutes: Number(params.get("minutes")) || 0,
+      vehicleType: params.get("vehicleType") || "standard",
+      isFamilyRide: params.get("isFamilyRide") === "1",
+      riderRecording: params.get("riderRecording") === "1",
+      paymentMethod: "card",
+      pickupLocation: params.get("pickupLat") ? { lat: Number(params.get("pickupLat")), lng: Number(params.get("pickupLng")) } : null,
+      dropoffLocation: params.get("dropoffLat") ? { lat: Number(params.get("dropoffLat")), lng: Number(params.get("dropoffLng")) } : null,
+    };
+
+    (async () => {
+      try {
+        const id = await createRide(rideData);
+        if (rideData.isFamilyRide) {
+          try { await createFamilyRideRoom(id); } catch (e) { /* proceeds without video */ }
+        }
+        setDestination(rideData.destination);
+        setPickupPos(rideData.pickupLocation);
+        setRideId(id);
+        setScreen("finding");
+      } catch (err) {
+        alert("Payment succeeded, but couldn't create your ride: " + (err.message || "unknown error") + ". Please contact support.");
+      }
+      // Clean the query params out of the URL so a refresh doesn't re-book.
+      window.history.replaceState({}, "", "/rider");
+    })();
+  }, []);
+
   // Guards against an accidental swipe/back gesture closing the whole app —
   // first back press just shows a "tap again to exit" message instead of exiting.
   useEffect(() => {
@@ -995,13 +1035,46 @@ export default function RiderApp() {
     setDestination(dest);
     setPickupPos(pickupLoc || null);
 
+    // Card payments: don't create the ride yet. Send the rider to pay first —
+    // the ride only gets created (and only then becomes visible to drivers)
+    // once they land back here having actually paid. This prevents a driver
+    // from ever seeing/accepting a ride that hasn't been paid for.
+    if (paymentMethod === "card") {
+      try {
+        const res = await fetch("/api/create-payment-link", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            riderName: user.name, riderUid: user.uid,
+            destination: dest, fare: finalFare, miles: realTrip?.miles || 0, minutes: realTrip?.minutes || 0,
+            vehicleType, isFamilyRide: !!isFamilyRide, riderRecording: !!user.audioRecordingEnabled,
+            pickupLat: pickupLoc?.lat, pickupLng: pickupLoc?.lng,
+            dropoffLat: dropoffLoc?.lat, dropoffLng: dropoffLoc?.lng,
+            returnTo: "/rider",
+          }),
+        });
+        const data = await res.json();
+        if (data.url) {
+          window.location.href = data.url;
+          return;
+        } else {
+          alert("Couldn't set up card payment: " + (data.error || "unknown reason") + ". Please try again.");
+          return;
+        }
+      } catch (err) {
+        alert("Couldn't set up card payment. Please try again.");
+        return;
+      }
+    }
+
+    // Cash payments book immediately, same as before.
     const rideData = {
       riderName: user.name, riderUid: user.uid,
       destination: dest, fare: finalFare, miles: realTrip?.miles || 0, minutes: realTrip?.minutes || 0,
       vehicleType,
       isFamilyRide: !!isFamilyRide,
       riderRecording: !!user.audioRecordingEnabled,
-      paymentMethod: paymentMethod || "card",
+      paymentMethod: "cash",
       pickupLocation: pickupLoc ? { lat: pickupLoc.lat, lng: pickupLoc.lng } : null,
       dropoffLocation: dropoffLoc ? { lat: dropoffLoc.lat, lng: dropoffLoc.lng } : null,
     };
@@ -1015,25 +1088,6 @@ export default function RiderApp() {
     }
     if (isFamilyRide) {
       try { await createFamilyRideRoom(id); } catch (e) { /* room creation failed — trip still proceeds without video */ }
-    }
-
-    if (paymentMethod === "card") {
-      try {
-        const res = await fetch("/api/create-payment-link", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ fare: finalFare, destination: dest, rideId: id }),
-        });
-        const data = await res.json();
-        if (data.url) {
-          window.location.href = data.url;
-          return;
-        } else {
-          alert("Couldn't set up card payment — proceeding with ride, please pay driver directly.");
-        }
-      } catch (err) {
-        alert("Couldn't set up card payment — proceeding with ride, please pay driver directly.");
-      }
     }
 
     setRideId(id);
