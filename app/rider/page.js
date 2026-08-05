@@ -49,9 +49,10 @@ function getCurrentPosition() {
 }
 
 // Turns typed destination text into real coordinates via Mapbox's Geocoding API.
-async function geocodeAddress(query) {
+async function geocodeAddress(query, biasNear) {
   const token = process.env.NEXT_PUBLIC_MAPBOX_TOKEN;
-  const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${token}&limit=1`;
+  const proximity = biasNear ? `&proximity=${biasNear.lng},${biasNear.lat}` : "";
+  const url = `https://api.mapbox.com/geocoding/v5/mapbox.places/${encodeURIComponent(query)}.json?access_token=${token}&limit=1&country=US${proximity}`;
   const res = await fetch(url);
   if (!res.ok) throw new Error("Couldn't look up that address.");
   const data = await res.json();
@@ -498,7 +499,7 @@ function DestinationScreen({ onBack, onConfirm, isReturnTrip }) {
     setTripLoading(true);
     const timer = setTimeout(async () => {
       try {
-        const loc = await geocodeAddress(dest.trim());
+        const loc = await geocodeAddress(dest.trim(), pickupLoc);
         const route = await getDrivingRoute(pickupLoc, loc);
         if (!cancelled) {
           setDropoffLoc(loc);
