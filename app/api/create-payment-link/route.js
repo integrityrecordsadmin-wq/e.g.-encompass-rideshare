@@ -45,10 +45,10 @@ export async function POST(request) {
       return Response.json({ error: "Couldn't set up booking" }, { status: 500 });
     }
 
-    // Create a real Square Order (not a bare quick_pay link) so we can attach
-    // our token as reference_id — the webhook uses this to match the payment
-    // back to the correct pending booking.
-    const orderRes = await fetch("https://connect.squareup.com/v2/orders", {
+    // Create the payment link with the order built inline (location, our
+    // reference token, and the line item) all in one call — this avoids the
+    // separate order-creation step and the field mismatches that came with it.
+    const linkRes = await fetch("https://connect.squareup.com/v2/online-checkout/payment-links", {
       method: "POST",
       headers: {
         "Square-Version": "2024-06-20",
@@ -56,7 +56,7 @@ export async function POST(request) {
         "Content-Type": "application/json",
       },
       body: JSON.stringify({
-        idempotency_key: `order-${token}`,
+        idempotency_key: `link-${token}`,
         order: {
           location_id: process.env.SQUARE_LOCATION_ID,
           reference_id: token,
@@ -68,24 +68,6 @@ export async function POST(request) {
             },
           ],
         },
-      }),
-    });
-    const orderData = await orderRes.json();
-    if (!orderRes.ok) {
-      console.error("Square order error:", orderData);
-      return Response.json({ error: orderData.errors?.[0]?.detail || "Couldn't create order" }, { status: 500 });
-    }
-
-    const linkRes = await fetch("https://connect.squareup.com/v2/online-checkout/payment-links", {
-      method: "POST",
-      headers: {
-        "Square-Version": "2024-06-20",
-        "Authorization": `Bearer ${process.env.SQUARE_ACCESS_TOKEN}`,
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        idempotency_key: `link-${token}`,
-        order: { id: orderData.order.id, location_id: process.env.SQUARE_LOCATION_ID },
         checkout_options: {
           redirect_url: `${process.env.NEXT_PUBLIC_SITE_URL}${body.returnTo || "/rider"}?payment=pending&token=${token}`,
         },
