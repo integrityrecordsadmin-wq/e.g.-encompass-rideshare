@@ -110,6 +110,9 @@ function HotelBookingForm({ onBooked }) {
       try {
         const loc = await geocodeAddress(dest.trim(), pickupLoc);
         const route = await getDrivingRoute(pickupLoc, loc);
+        if (route.miles > 100) {
+          throw new Error("That address seems too far away — try adding the city and state (e.g. \"DFW Airport, Dallas TX\") and search again.");
+        }
         if (!cancelled) {
           setDropoffLoc(loc);
           setRealTrip(route);
