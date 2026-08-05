@@ -467,8 +467,8 @@ function JobBoard({ person }) {
 
 function LiveVideoPanel() {
   return (
-    <div className="absolute top-20 right-4 w-28 rounded-2xl overflow-hidden z-20 flex flex-col items-center justify-center text-center p-2"
-      style={{ background: "rgba(24,27,34,0.95)", border: "1px solid #2B2F3A", boxShadow: "0 8px 20px -4px rgba(0,0,0,0.5)" }}>
+    <div className="hidden md:flex fixed top-1/2 -translate-y-1/2 w-24 rounded-2xl overflow-hidden z-20 flex-col items-center justify-center text-center p-2"
+      style={{ left: "calc(50% + 13rem)", background: "rgba(24,27,34,0.95)", border: "1px solid #2B2F3A", boxShadow: "0 8px 20px -4px rgba(0,0,0,0.5)" }}>
       <Video size={16} color="#7A7F8A" className="mb-1" />
       <p className="text-[10px] font-semibold" style={{ color: "#F5F5F0" }}>Live video</p>
       <p className="text-[9px] leading-tight mt-0.5" style={{ color: "#7A7F8A" }}>Appears during an active Family Ride</p>
@@ -543,7 +543,6 @@ function FamilyDashboard({ person, family, onLogout }) {
 
   return (
     <div className="w-full h-full flex flex-col" style={{ background: "#111318" }}>
-      <LiveVideoPanel />
       <div className="px-6 pt-8 pb-4">
         <h1 className="text-2xl font-semibold" style={{ color: "#F5F5F0" }}>Family Hub</h1>
         <p className="text-sm font-medium mt-0.5" style={{ color: ACCENT }}>Parental Control</p>
@@ -710,19 +709,22 @@ export default function FamilyApp() {
   }, [person?.familyId]);
 
   return (
-    <div className="w-full h-screen max-w-sm mx-auto overflow-hidden sm:rounded-[2rem] sm:h-[700px] sm:my-8 relative"
-      style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.4)" }}>
-      {!person ? (
-        <FamilyAuthScreen onAuthed={setPerson} />
-      ) : !person.familyId && !family ? (
-        <CreateOrJoinScreen person={person} onFamilyReady={(f) => setPerson({ ...person, familyId: f.id })} />
-      ) : family ? (
-        <FamilyDashboard person={person} family={family} onLogout={() => { setPerson(null); setFamily(null); }} />
-      ) : (
-        <div className="w-full h-full flex items-center justify-center" style={{ background: "#111318" }}>
-          <p style={{ color: "#7A7F8A" }}>Loading…</p>
-        </div>
-      )}
-    </div>
+    <>
+      <div className="w-full h-screen max-w-sm mx-auto overflow-hidden sm:rounded-[2rem] sm:h-[700px] sm:my-8 relative"
+        style={{ boxShadow: "0 20px 60px rgba(0,0,0,0.4)" }}>
+        {!person ? (
+          <FamilyAuthScreen onAuthed={setPerson} />
+        ) : !person.familyId && !family ? (
+          <CreateOrJoinScreen person={person} onFamilyReady={(f) => setPerson({ ...person, familyId: f.id })} />
+        ) : family ? (
+          <FamilyDashboard person={person} family={family} onLogout={() => { setPerson(null); setFamily(null); }} />
+        ) : (
+          <div className="w-full h-full flex items-center justify-center" style={{ background: "#111318" }}>
+            <p style={{ color: "#7A7F8A" }}>Loading…</p>
+          </div>
+        )}
+      </div>
+      {family && <LiveVideoPanel />}
+    </>
   );
 }
