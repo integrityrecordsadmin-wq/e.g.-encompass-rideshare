@@ -85,7 +85,7 @@ export async function POST(request) {
       },
       body: JSON.stringify({
         idempotency_key: `link-${token}`,
-        order: { id: orderData.order.id },
+        order: { id: orderData.order.id, location_id: process.env.SQUARE_LOCATION_ID },
         checkout_options: {
           redirect_url: `${process.env.NEXT_PUBLIC_SITE_URL}${body.returnTo || "/rider"}?payment=pending&token=${token}`,
         },
