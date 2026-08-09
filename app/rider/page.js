@@ -441,7 +441,7 @@ function HomeScreen({ user, onRequest, onLogout, onSafety, onMyPlan }) {
         <div className="mt-5">
           <p className="text-xs uppercase tracking-wide mb-2" style={{ color: "#9A9890" }}>Need to reach us?</p>
           <div className="flex gap-2">
-            <a href="tel:+14697278259"
+            <a href="tel:+14693097655"
               className="flex-1 flex flex-col items-center gap-1 py-3 rounded-xl"
               style={{ background: "#EDEBE2" }}>
               <Phone size={18} color={ACCENT} />
