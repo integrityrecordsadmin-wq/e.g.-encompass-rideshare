@@ -6,7 +6,7 @@ import { ACCENT, AMBER } from "../../lib/tokens";
 import { fareForTrip } from "../../lib/fare";
 import { VEHICLE_TYPES } from "../../lib/vehicleTypes";
 import { subscribeToRide, getPendingBooking } from "../../lib/supabase-db";
-
+import HowToBookModal from "../../components/HowToBookModal";
 // Hotels in Ennis, TX and Waxahachie, TX — selecting one auto-fills pickup
 // address so guests don't need to know or type their own location.
 const HOTELS = [
@@ -174,7 +174,8 @@ function HotelBookingForm({ onBooked }) {
       <div className="max-w-md w-full mx-auto">
         <h1 className="text-2xl font-semibold tracking-tight mb-1" style={{ color: "#F5F5F0" }}>Encompass Rideshare</h1>
         <p className="text-sm mb-6" style={{ color: "#7A7F8A" }}>Book a ride from your hotel — to the airport or anywhere around town.</p>
-
+      <p className="text-sm mb-6" style={{ color: "#7A7F8A" }}>Book a ride from your hotel — to the airport or anywhere around town.</p>
+      <div className="mb-6"><HowToBookModal phone="4693097655" /></div>
         <div className="space-y-3">
           <input value={name} onChange={(e) => setName(e.target.value)} placeholder="Your name"
             name="name" autoComplete="name"
@@ -267,7 +268,7 @@ function HotelBookingForm({ onBooked }) {
         </div>
 
         <div className="mt-8 flex gap-2">
-          <a href="tel:+14697278259"
+          <a href="tel:+14693097655"
             className="flex-1 flex flex-col items-center gap-1 py-3 rounded-xl"
             style={{ background: "#1D2028" }}>
             <Phone size={18} color={ACCENT} />
