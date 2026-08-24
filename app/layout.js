@@ -1,4 +1,4 @@
-export const dynamic = "force-dynamic";
+(export const dynamic = "force-dynamic";
 import "./globals.css";
 
 export const metadata = {
@@ -19,6 +19,16 @@ export default function RootLayout({ children }) {
       <body>
         <main>{children}</main>
       </body>
+    </html>
+  );
+}
+export default function RootLayout({ children }) {
+  return (
+    <html lang="en">
+      <head>
+        <meta name='impact-site-verification' value='10831d29-ca06-4aa3-a00b-3a6ee9bbe34b' />
+      </head>
+      <body>{children}</body>
     </html>
   );
 }
