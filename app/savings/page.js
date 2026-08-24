@@ -26,8 +26,8 @@ import { ACCENT, AMBER } from "../../lib/tokens";
    ========================================================================= */
 
 // TODO: replace with your real approved affiliate links once accepted.
-const IBOTTA_LINK = "https://ibotta.com/r/YOUR_CODE_HERE";
-const UPSIDE_LINK = "https://upside.app.link/YOUR_CODE_HERE";
+const IBOTTA_LINK = "https://ibotta.com";
+const UPSIDE_LINK = "https://upside.com";
 
 function Card({ icon, title, blurb, bullets, href, color }) {
   return (
